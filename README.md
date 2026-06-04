@@ -8,7 +8,17 @@ cargar en **ALET**, con botón de copiado por campo.
 
 - **Altas**: detecta los registros estructurados (agrupando lotes por *Shipment*), y calcula
   Nro. orden, Shipment, Delivery, Tipo de unidad, Fecha/Turno, Alocación, Cliente, Transporte,
-  Localidad, Provincia y Fecha planeada de carga.
+  Localidad, Provincia, Fecha planeada de carga y Fecha de entrega (DeliveryDate).
+  Botón **"Exportar Excel (import Manual ALET)"**: genera un `.xlsx` con una orden por fila,
+  con cada dato en la columna que pide la *Importación de preingresos* de ALET (Origen: **Manual**):
+  Transporte→A, Shipment→B, N° orden→D, Cliente→F, Localidad→G, Alocación→L, Fecha planeada de
+  carga→Q, Fecha de entrega→R, Provincia→AE, Tipo de unidad→AF, Delivery→AO. *Carga combinada
+  externa* (AL) y *Centro de distribución* (AN) se dejan vacíos (ALET los pide al confirmar).
+
+> **Formato del .xlsx**: ambos exports (Expo y Manual) generan un workbook **estándar**
+> (`styles.xml` + `sharedStrings.xml` + `docProps` + `<dimension>`), no un xlsx mínimo. El lector
+> de ALET es estricto y rechaza con "error de formato" los archivos que solo traen celdas
+> `inlineStr` sin esas partes. Generado 100% en el navegador, sin dependencias.
 - **Bajas**: lista las órdenes a eliminar en ALET (transportista, SAP, shipment, cliente, sector, fecha).
 - **Selector de transportista**: autollena el campo Transporte de todas las órdenes.
 

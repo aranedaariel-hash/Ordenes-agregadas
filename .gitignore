@@ -4,6 +4,11 @@ _expo_*.js
 .__chk.js
 salida_expo/
 
+# Archivos de prueba/referencia con datos reales (no subir)
+*.xlsx
+*.xls
+*.png
+
 # Dependencias / build
 node_modules/
 .vercel/

@@ -154,6 +154,9 @@
   .baja-transp{font-weight:700;font-size:.92rem;flex-basis:100%;color:#ffd7d7;}
 
   /* ALTAS */
+  .altas-export{margin:0 0 16px;}
+  .altas-expbtn{width:100%;}
+  .altas-exphint{font-size:12px;color:var(--muted,#667);margin-top:6px;line-height:1.4;}
   .altas-cards{display:flex;flex-direction:column;gap:16px;}
   .alta-card{
     background:var(--green-soft);border:1px solid var(--green-border);border-radius:var(--radius);
@@ -617,19 +620,21 @@ function procesar(raw, now){
     const storageIdx = w.findIndex(x => /^(CT|WH|DP)$/i.test(x));
     const storage = storageIdx >= 0 ? w[storageIdx].toUpperCase() : null;
     const kgIdx = w.findIndex(x => /^KG$/i.test(x));
-    let weight = 0, plannedLoad = null;
+    let weight = 0;
     if(kgIdx > 0) weight = parseWeight(w[kgIdx-1]);
-    if(kgIdx >= 0 && w[kgIdx+1]) plannedLoad = w[kgIdx+1];
-    // fallback fecha de carga: buscar primera fecha tras la posición de peso
-    if(!plannedLoad){
-      for(let k = (kgIdx>=0?kgIdx+1:6); k < w.length; k++){
-        if(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/.test(w[k])){ plannedLoad = w[k]; break; }
-      }
+    // Fechas tras el peso, en orden DOW: 1ª = PlannedLoadDate, 2ª = DeliveryDate
+    // (luego vienen PlannedDelivDate_Shipment, ServiceAgent, Batch Number).
+    const DATE_TOKEN = /\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/;
+    const datesAfter = [];
+    for(let k = (kgIdx>=0?kgIdx+1:6); k < w.length; k++){
+      if(DATE_TOKEN.test(w[k])) datesAfter.push(w[k]);
     }
+    let plannedLoad  = datesAfter[0] || null;
+    let deliveryDate = datesAfter[1] || null;
 
     if(!groups[shipment]){
       groups[shipment] = {
-        shipment, delivery, sap, cliente, city, stateProv, plannedLoad,
+        shipment, delivery, sap, cliente, city, stateProv, plannedLoad, deliveryDate,
         transportista: transpAntesDe(rw.start),
         storages: [], weight: 0, hasUnknownLoc: false
       };
@@ -641,6 +646,7 @@ function procesar(raw, now){
     else if(weight > 0) g.hasUnknownLoc = true;  // lote con carga pero sin storage → ubicación desconocida
     // (lote sin storage y 0 kg → se ignora: no aporta peso ni alocación)
     if(!g.plannedLoad && plannedLoad) g.plannedLoad = plannedLoad;
+    if(!g.deliveryDate && deliveryDate) g.deliveryDate = deliveryDate;
   }
 
   const fturno = fechaTurno(now);
@@ -669,6 +675,7 @@ function procesar(raw, now){
       // está en la tabla, se usa como respaldo el código State/Province del propio dato.
       provincia: provinciaDe(g.city) || (PROV_CODES.has(g.stateProv) ? g.stateProv : null),
       fechaCarga: fmtFecha(g.plannedLoad),
+      fechaEntrega: fmtFecha(g.deliveryDate),
       totalKg: g.weight
     };
   });
@@ -832,6 +839,7 @@ function fieldRow(label, value, opts){
   if(opts.editable){
     const inp = el("input", "transp");
     inp.type = "text"; inp.value = value || ""; inp.placeholder = "Sin detectar — completar";
+    if(opts.onInput) inp.addEventListener("input", () => opts.onInput(inp.value));
     row.appendChild(inp);
     getValue = () => inp.value;
   } else {
@@ -898,6 +906,18 @@ function render(res){
     h.appendChild(pill);
     sec.appendChild(h);
 
+    const expBar = el("div", "altas-export");
+    const btnExp = el("button", "btn-primary altas-expbtn", "⬇️ Exportar Excel (import Manual ALET)");
+    btnExp.type = "button";
+    btnExp.addEventListener("click", () => {
+      const d = new Date();
+      const stamp = `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
+      downloadXlsx(buildXlsxAltas(res.altas), `Preingresos ALET ${stamp}.xlsx`);
+    });
+    expBar.appendChild(btnExp);
+    expBar.appendChild(el("div", "altas-exphint", "Genera un .xlsx con una orden por fila para el modo «Origen: Manual» de Importación de preingresos. Centro de distribución y Carga combinada externa van vacíos (ALET los pedirá al confirmar)."));
+    sec.appendChild(expBar);
+
     const cont = el("div", "altas-cards");
     res.altas.forEach((a, i) => {
       const card = el("div", "alta-card");
@@ -915,10 +935,11 @@ function render(res){
       fields.appendChild(fieldRow("Fecha/Turno", a.fechaTurno));
       fields.appendChild(fieldRow("Alocación", a.alocacion));
       fields.appendChild(fieldRow("Cliente", a.cliente));
-      fields.appendChild(fieldRow("Transporte", a.transporte, { editable:true }));
+      fields.appendChild(fieldRow("Transporte", a.transporte, { editable:true, onInput:(val)=>{ a.transporte = val; } }));
       fields.appendChild(fieldRow("Localidad", a.localidad));
       fields.appendChild(fieldRow("Provincia", a.provincia));
       fields.appendChild(fieldRow("Fecha plan. carga", a.fechaCarga));
+      fields.appendChild(fieldRow("Fecha entrega", a.fechaEntrega));
       card.appendChild(fields);
 
       const foot = el("div", "alta-foot");
@@ -1205,21 +1226,63 @@ const CRC_TABLE = (() => {
 function crc32(bytes){ let c=0xFFFFFFFF; for(let i=0;i<bytes.length;i++) c=CRC_TABLE[(c^bytes[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
 function escXml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;"); }
 function cellRef(colIdx, rowNum){ let s=""; let n=colIdx+1; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); } return s+rowNum; }
-function buildSheetXml(orders, withHeader){
-  const OUT = { shipment:1, orden:3, cliente:4, transporte:13 };  // B,D,E,N
-  let rowsXml = ""; let rowNum = 1;
-  const emitRow = (vals) => {
-    let cells = "";
-    for(const k in vals){
-      const ci = OUT[k]; const v = vals[k];
-      if(v === "" || v == null) continue;
-      cells += `<c r="${cellRef(ci,rowNum)}" t="inlineStr"><is><t xml:space="preserve">${escXml(v)}</t></is></c>`;
-    }
-    rowsXml += `<row r="${rowNum}">${cells}</row>`; rowNum++;
+/* Construye un .xlsx ESTÁNDAR (estilos + sharedStrings + docProps + dimension),
+   como el que produce cualquier librería de Office. ALET rechaza los xlsx mínimos
+   (solo inlineStr, sin styles/sharedStrings/docProps) con "error de formato"; este
+   formato completo evita ese error.
+   rows: array de filas; cada fila es un objeto { colIdx(0-based): valorTexto }.
+   Celdas vacías o nulas se omiten. */
+function buildStandardXlsx(rows, sheetName){
+  // tabla de cadenas compartidas
+  const sst = [], sstIndex = new Map(); let totalRefs = 0;
+  const intern = (s) => {
+    s = String(s);
+    let i = sstIndex.get(s);
+    if(i === undefined){ i = sst.length; sst.push(s); sstIndex.set(s, i); }
+    totalRefs++; return i;
   };
-  if(withHeader) emitRow({ shipment:"Shipment", orden:"N° orden", cliente:"Cliente", transporte:"Transporte" });
-  for(const o of orders) emitRow({ shipment:o.shipment, orden:o.orden, cliente:o.cliente, transporte:o.transporte });
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowsXml}</sheetData></worksheet>`;
+  // filas + dimensión
+  let minC = Infinity, maxC = -Infinity, maxR = 0, rowsXml = "";
+  rows.forEach((cells, ri) => {
+    const rowNum = ri + 1;
+    const cols = Object.keys(cells).map(Number)
+      .filter(c => cells[c] !== "" && cells[c] != null).sort((a, b) => a - b);
+    let cs = "";
+    for(const c of cols){
+      if(c < minC) minC = c; if(c > maxC) maxC = c;
+      cs += `<c r="${cellRef(c, rowNum)}" t="s"><v>${intern(cells[c])}</v></c>`;
+    }
+    if(cols.length) maxR = rowNum;
+    rowsXml += `<row r="${rowNum}">${cs}</row>`;
+  });
+  const dim = maxR === 0 ? "A1" : `${cellRef(minC,1)}:${cellRef(maxC,maxR)}`;
+  const sstXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+    `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${totalRefs}" uniqueCount="${sst.length}">` +
+    sst.map(s => `<si><t xml:space="preserve">${escXml(s)}</t></si>`).join("") + `</sst>`;
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    `<dimension ref="${dim}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews>` +
+    `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData>${rowsXml}</sheetData></worksheet>`;
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+    `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>` +
+    `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
+    `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+    `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+    `<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>` +
+    `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const files = [
+    { name:"[Content_Types].xml", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
+    { name:"_rels/.rels", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>` },
+    { name:"docProps/core.xml", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>Turnero CC</dc:creator><cp:lastModifiedBy>Turnero CC</cp:lastModifiedBy></cp:coreProperties>` },
+    { name:"docProps/app.xml", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Turnero CC</Application></Properties>` },
+    { name:"xl/workbook.xml", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escXml(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
+    { name:"xl/_rels/workbook.xml.rels", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>` },
+    { name:"xl/styles.xml", data: stylesXml },
+    { name:"xl/sharedStrings.xml", data: sstXml },
+    { name:"xl/worksheets/sheet1.xml", data: sheetXml }
+  ];
+  return zipStore(files);
 }
 function zipStore(files){
   const enc = new TextEncoder(); const parts = []; const central = []; let offset = 0;
@@ -1250,15 +1313,32 @@ function zipStore(files){
   for(const p of parts){ out.set(p, pos); pos += p.length; }
   return out;
 }
+// Turnero Expo: B(1)=Shipment, D(3)=N° orden, E(4)=Cliente, N(13)=Transporte
 function buildXlsx(orders, withHeader){
-  const files = [
-    { name:"[Content_Types].xml", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>` },
-    { name:"_rels/.rels", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
-    { name:"xl/workbook.xml", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Turnos" sheetId="1" r:id="rId1"/></sheets></workbook>` },
-    { name:"xl/_rels/workbook.xml.rels", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>` },
-    { name:"xl/worksheets/sheet1.xml", data: buildSheetXml(orders, withHeader) }
-  ];
-  return zipStore(files);
+  const rows = [];
+  if(withHeader) rows.push({ 1:"Shipment", 3:"N° orden", 4:"Cliente", 13:"Transporte" });
+  for(const o of orders) rows.push({ 1:o.shipment, 3:o.orden, 4:o.cliente, 13:o.transporte });
+  return buildStandardXlsx(rows, "Turnos");
+}
+
+/* Excel para Importación de preingresos ALET (Origen: Manual).
+   Mapeo posicional de columnas (0-indexed) según pantalla de ALET:
+   A=0 Transporte · B=1 Shipment · D=3 N° orden · F=5 Cliente · G=6 Localidad ·
+   L=11 Alocación · Q=16 Fecha planeada de carga · R=17 Fecha de entrega ·
+   AE=30 Provincia · AF=31 Tipo de unidad · AO=40 Delivery number.
+   AL=37 (Carga combinada externa) y AN=39 (Centro de distribución) se dejan vacíos. */
+function buildXlsxAltas(altas){
+  const M = {
+    transporte:0, shipment:1, nroOrden:3, cliente:5, localidad:6,
+    alocacion:11, fechaCarga:16, fechaEntrega:17, provincia:30,
+    tipoUnidad:31, delivery:40
+  };
+  const rows = altas.map(a => {
+    const r = {};
+    for(const k in M){ const v = a[k]; if(v !== "" && v != null) r[M[k]] = v; }
+    return r;
+  });
+  return buildStandardXlsx(rows, "Preingresos");
 }
 
 async function readAllSheets(arrayBuffer){
