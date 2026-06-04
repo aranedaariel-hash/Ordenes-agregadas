@@ -1,0 +1,11 @@
+# Artefactos de prueba local (no van al deploy)
+_serve.js
+.__chk.js
+
+# Dependencias / build
+node_modules/
+.vercel/
+
+# Sistema
+.DS_Store
+Thumbs.db

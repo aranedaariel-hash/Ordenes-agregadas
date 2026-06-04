@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b1f3a">
+<title>Procesador de Órdenes DOW</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Órdenes DOW">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1f3a;
+    --bg2:#0f2747;
+    --panel:#13315c;
+    --panel2:#0e2546;
+    --ink:#eaf1fb;
+    --muted:#9fb6d6;
+    --line:#244a7a;
+    --accent:#2f80ed;
+    --accent2:#1c63c7;
+    --green:#1f7a4d;
+    --green-soft:#0f2e22;
+    --green-border:#2f9c66;
+    --red:#9b2c2c;
+    --red-soft:#301517;
+    --red-border:#c0392b;
+    --blue-badge:#1d6fb8;
+    --orange-badge:#cc7a1a;
+    --danger:#e74c3c;
+    --ok:#2ecc71;
+    --radius:14px;
+    --shadow:0 6px 22px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 100%);
+    color:var(--ink);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+    line-height:1.4;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 64px;}
+  header.top{
+    display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-top:6px;
+  }
+  .logo{
+    width:44px;height:44px;border-radius:12px;flex:0 0 auto;
+    background:linear-gradient(145deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:18px;color:#fff;box-shadow:var(--shadow);
+    letter-spacing:.5px;
+  }
+  header.top h1{font-size:1.18rem;margin:0;font-weight:600;line-height:1.15;}
+  header.top p{margin:2px 0 0;font-size:.78rem;color:var(--muted);}
+
+  .card-input{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;box-shadow:var(--shadow);
+  }
+  label.fld{display:block;font-size:.85rem;color:var(--muted);margin-bottom:8px;font-weight:500;}
+  .transp-pick{margin-bottom:16px;}
+  .pick-lbl{display:block;font-size:.85rem;color:var(--muted);margin-bottom:9px;font-weight:500;}
+  .pick-lbl .opt{opacity:.65;font-weight:400;font-size:.8rem;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{
+    background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    padding:8px 15px;border-radius:22px;font-family:inherit;font-size:.85rem;font-weight:600;
+    cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease;
+  }
+  .chip:hover{border-color:var(--accent);}
+  .chip.sel{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .chip.sel::before{content:"✓ ";}
+  textarea#input{
+    width:100%;min-height:200px;resize:vertical;border-radius:10px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--ink);
+    padding:12px 14px;font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.86rem;line-height:1.5;outline:none;
+  }
+  textarea#input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,128,237,.2);}
+  .btnrow{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  button{
+    font-family:inherit;font-size:.92rem;font-weight:600;cursor:pointer;
+    border:none;border-radius:10px;padding:12px 18px;transition:transform .05s ease,filter .15s ease,background .15s ease;
+  }
+  button:active{transform:translateY(1px);}
+  .btn-primary{background:var(--accent);color:#fff;flex:1;min-width:140px;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line);}
+  .btn-ghost:hover{color:var(--ink);border-color:var(--accent);}
+  .btn-float{background:rgba(47,128,237,.14);color:var(--ink);border:1px solid var(--accent);}
+  .btn-float:hover{background:rgba(47,128,237,.26);}
+  .btn-float:disabled{opacity:.6;cursor:default;}
+  .floating-note{
+    margin-top:22px;background:var(--panel);border:1px dashed var(--accent);border-radius:var(--radius);
+    padding:22px 18px;text-align:center;color:var(--muted);font-size:.9rem;
+  }
+  .floating-note .ico{font-size:1.6rem;display:block;margin-bottom:6px;}
+  .pip-title{
+    display:flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;margin:0 0 4px;color:var(--ink);
+  }
+  .pip-title .dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(145deg,var(--accent),var(--accent2));
+    display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;color:#fff;font-weight:700;}
+
+  /* Modo compacto para la ventana flotante (que una orden entre entera sin scroll) */
+  body.pip .wrap{padding:10px 12px 14px;max-width:none;}
+  body.pip .pip-title{margin-bottom:8px;}
+  body.pip .section{margin-top:12px;}
+  body.pip .section h2{font-size:.9rem;margin-bottom:7px;}
+  body.pip .altas-cards{gap:11px;}
+  body.pip .alta-head{padding:7px 13px;}
+  body.pip .fields{padding:1px 9px;}
+  body.pip .frow{padding:5px 3px;gap:8px;}
+  body.pip .frow .lab{flex-basis:100px;font-size:.66rem;}
+  body.pip .frow .val{font-size:.85rem;}
+  body.pip .frow input.transp{padding:5px 8px;font-size:.84rem;}
+  body.pip .copybtn{width:34px;height:30px;font-size:.92rem;}
+  body.pip .alta-foot{padding:8px 13px;}
+  body.pip .totalkg{font-size:.84rem;}
+  body.pip .aloc-badge{font-size:.7rem;padding:4px 10px;}
+  body.pip .bajas-box .baja-row{padding:9px 13px;}
+
+  .section{margin-top:24px;}
+  .section h2{
+    font-size:1.02rem;margin:0 0 12px;display:flex;align-items:center;gap:9px;font-weight:600;
+  }
+  .count-pill{
+    font-size:.72rem;font-weight:600;background:rgba(255,255,255,.1);
+    padding:2px 9px;border-radius:20px;color:var(--ink);
+  }
+
+  /* BAJAS */
+  .bajas-box{background:var(--red-soft);border:1px solid var(--red-border);border-radius:var(--radius);padding:6px 0 4px;overflow:hidden;}
+  .baja-row{
+    display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;
+    padding:13px 16px;border-bottom:1px solid rgba(192,57,43,.28);
+  }
+  .baja-row:last-child{border-bottom:none;}
+  .badge-baja{
+    background:var(--red);color:#fff;font-size:.68rem;font-weight:700;letter-spacing:.5px;
+    padding:3px 9px;border-radius:6px;flex:0 0 auto;
+  }
+  .baja-field{font-size:.84rem;display:flex;flex-direction:column;gap:1px;}
+  .baja-field .k{font-size:.66rem;color:#e8a3a3;text-transform:uppercase;letter-spacing:.4px;}
+  .baja-field .v{font-weight:600;}
+  .baja-transp{font-weight:700;font-size:.92rem;flex-basis:100%;color:#ffd7d7;}
+
+  /* ALTAS */
+  .altas-cards{display:flex;flex-direction:column;gap:16px;}
+  .alta-card{
+    background:var(--green-soft);border:1px solid var(--green-border);border-radius:var(--radius);
+    overflow:hidden;box-shadow:var(--shadow);
+  }
+  .alta-head{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:11px 16px;background:rgba(47,156,102,.16);border-bottom:1px solid rgba(47,156,102,.3);
+  }
+  .alta-head .ord-n{font-weight:700;font-size:.9rem;}
+  .badge-alta{background:var(--green);color:#fff;font-size:.68rem;font-weight:700;letter-spacing:.5px;padding:3px 9px;border-radius:6px;}
+  .fields{padding:6px 12px 4px;}
+  .frow{
+    display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid rgba(47,156,102,.16);
+  }
+  .frow:last-child{border-bottom:none;}
+  .frow .lab{flex:0 0 116px;font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;line-height:1.2;}
+  .frow .val{flex:1;min-width:0;font-size:.95rem;font-weight:600;word-break:break-word;}
+  .frow .val.nd{color:var(--danger);font-weight:600;}
+  .frow input.transp{
+    flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.92rem;font-weight:600;outline:none;
+  }
+  .frow input.transp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,128,237,.18);}
+  .copybtn{
+    flex:0 0 auto;width:38px;height:34px;border-radius:8px;background:rgba(255,255,255,.07);
+    border:1px solid var(--line);color:var(--ink);font-size:1rem;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;padding:0;transition:background .15s ease;
+  }
+  .copybtn:hover{background:rgba(255,255,255,.16);}
+  .copybtn.done{background:var(--green);border-color:var(--green-border);}
+  .alta-foot{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    padding:12px 16px;background:rgba(0,0,0,.16);border-top:1px solid rgba(47,156,102,.25);
+  }
+  .totalkg{font-size:.9rem;font-weight:600;}
+  .totalkg span{color:var(--muted);font-weight:500;}
+  .aloc-badge{font-size:.74rem;font-weight:700;letter-spacing:.4px;padding:5px 12px;border-radius:20px;color:#fff;}
+  .aloc-planta{background:var(--green);}
+  .aloc-dp{background:var(--blue-badge);}
+  .aloc-comb{background:var(--orange-badge);}
+  .aloc-nd{background:var(--red);}
+
+  .error-box{
+    margin-top:22px;background:var(--panel);border:1px dashed var(--line);border-radius:var(--radius);
+    padding:26px 18px;text-align:center;color:var(--muted);
+  }
+  .error-box .ico{font-size:1.8rem;display:block;margin-bottom:8px;}
+  .hidden{display:none;}
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:var(--green);color:#fff;padding:11px 20px;border-radius:30px;font-size:.86rem;font-weight:600;
+    box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:50;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  footer.foot{margin-top:34px;text-align:center;font-size:.72rem;color:var(--muted);opacity:.7;}
+  @media(max-width:480px){
+    .frow .lab{flex-basis:96px;font-size:.7rem;}
+    .frow .val{font-size:.9rem;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="logo">DOW</div>
+    <div>
+      <h1>Procesador de Órdenes DOW</h1>
+      <p>Cambios logísticos → carga en ALET</p>
+    </div>
+  </header>
+
+  <div class="card-input">
+    <div class="transp-pick">
+      <span class="pick-lbl">Transporte para todas las órdenes <span class="opt">(opcional)</span></span>
+      <div class="chips" id="transpChips"></div>
+    </div>
+    <label class="fld" for="input">Pegá el texto del mail acá</label>
+    <textarea id="input" placeholder="Pegá acá el contenido del mail de Turnero nacional (altas y/o bajas)…" spellcheck="false"></textarea>
+    <div class="btnrow">
+      <button class="btn-primary" id="btnProc">Procesar</button>
+      <button class="btn-ghost" id="btnClear">Limpiar</button>
+      <button class="btn-float" id="btnFloat" hidden>⧉ Flotar encima</button>
+    </div>
+  </div>
+
+  <div id="results"></div>
+
+  <footer class="foot">Herramienta interna · sin envío de datos · todo se procesa en tu dispositivo</footer>
+</div>
+
+<div class="toast" id="toast">Copiado ✅</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Tabla de provincias (códigos ALET) y mapa de ciudades
+   ============================================================ */
+const PROV_NAME = {
+  "BUENOS AIRES":"B",
+  "CABA":"C","CAPITAL FEDERAL":"C","CIUDAD AUTONOMA DE BUENOS AIRES":"C","CIUDAD DE BUENOS AIRES":"C",
+  "CORDOBA":"X",
+  "SANTA FE":"S",
+  "MENDOZA":"M",
+  "SAN LUIS":"D",
+  "TUCUMAN":"T",
+  "ENTRE RIOS":"E",
+  "NEUQUEN":"Q",
+  "RIO NEGRO":"R",
+  "CHUBUT":"U",
+  "SANTA CRUZ":"Z",
+  "LA PAMPA":"L",
+  "CHACO":"H",
+  "CORRIENTES":"W",
+  "MISIONES":"N",
+  "FORMOSA":"P",
+  "JUJUY":"Y",
+  "SALTA":"A",
+  "SANTIAGO DEL ESTERO":"G",
+  "CATAMARCA":"K",
+  "LA RIOJA":"F",
+  "SAN JUAN":"J",
+  "TIERRA DEL FUEGO":"V"
+};
+
+// Ciudad -> código de provincia. Para ciudades ambiguas se eligió la más probable/poblada.
+const CITY_PROV = {
+  // Buenos Aires (B)
+  "LA PLATA":"B","MAR DEL PLATA":"B","BAHIA BLANCA":"B","TANDIL":"B","OLAVARRIA":"B","PERGAMINO":"B",
+  "JUNIN":"B","NECOCHEA":"B","AZUL":"B","CAMPANA":"B","ZARATE":"B","PILAR":"B","LUJAN":"B","SAN NICOLAS":"B",
+  "SAN NICOLAS DE LOS ARROYOS":"B","TRES ARROYOS":"B","QUILMES":"B","AVELLANEDA":"B","LANUS":"B","MORON":"B",
+  "SAN ISIDRO":"B","TIGRE":"B","LOMAS DE ZAMORA":"B","LA MATANZA":"B","SAN JUSTO":"B","BERAZATEGUI":"B",
+  "FLORENCIO VARELA":"B","ENSENADA":"B","BERISSO":"B","CHIVILCOY":"B","BALCARCE":"B","CORONEL SUAREZ":"B",
+  "PIGUE":"B","PUNTA ALTA":"B","DOLORES":"B","CHASCOMUS":"B","SALADILLO":"B","NUEVE DE JULIO":"B","9 DE JULIO":"B",
+  "BRAGADO":"B","TRENQUE LAUQUEN":"B","PEHUAJO":"B","LINCOLN":"B","SAN PEDRO":"B","BARADERO":"B","GENERAL RODRIGUEZ":"B",
+  "MORENO":"B","JOSE C PAZ":"B","SAN MIGUEL":"B","MALVINAS ARGENTINAS":"B","TRES DE FEBRERO":"B","ITUZAINGO":"B",
+  "HURLINGHAM":"B","VICENTE LOPEZ":"B","SAN FERNANDO":"B","ESCOBAR":"B","GARIN":"B","BENAVIDEZ":"B",
+  "EZEIZA":"B","ESTEBAN ECHEVERRIA":"B","MONTE GRANDE":"B","ALMIRANTE BROWN":"B","ADROGUE":"B","BURZACO":"B",
+  "PRESIDENTE DERQUI":"B","CANUELAS":"B","MERLO BUENOS AIRES":"B","SAN VICENTE":"B","CARMEN DE PATAGONES":"B",
+  "VILLA GESELL":"B","PINAMAR":"B","MIRAMAR":"B","CORONEL PRINGLES":"B","DAIREAUX":"B","BOLIVAR":"B",
+  "CHACABUCO":"B","GENERAL VILLEGAS":"B","RAUCH":"B","AYACUCHO":"B","LOBOS":"B","NAVARRO":"B","ROQUE PEREZ":"B",
+  "CIUDADELA":"B","RAMOS MEJIA":"B","HAEDO":"B","CASEROS":"B","SAN MARTIN":"B","GENERAL SAN MARTIN":"B",
+
+  // CABA (C)
+  "BUENOS AIRES":"C","CAPITAL":"C","RETIRO":"C","BARRACAS":"C","PALERMO":"C","FLORES":"C","MATADEROS":"C",
+
+  // Córdoba (X)
+  "CORDOBA":"X","RIO CUARTO":"X","VILLA MARIA":"X","SAN FRANCISCO":"X","VILLA CARLOS PAZ":"X","CARLOS PAZ":"X",
+  "ALTA GRACIA":"X","BELL VILLE":"X","RIO TERCERO":"X","MARCOS JUAREZ":"X","JESUS MARIA":"X","CRUZ DEL EJE":"X",
+  "ARROYITO":"X","VILLA DOLORES":"X","DEAN FUNES":"X","LA CARLOTA":"X","LABOULAYE":"X","ONCATIVO":"X",
+  "RIO SEGUNDO":"X","LAS VARILLAS":"X","MORTEROS":"X","CORRAL DE BUSTOS":"X","GENERAL CABRERA":"X",
+  "VILLA ALLENDE":"X","UNQUILLO":"X","RIO CEBALLOS":"X",
+
+  // Santa Fe (S)
+  "SANTA FE":"S","ROSARIO":"S","RAFAELA":"S","VENADO TUERTO":"S","RECONQUISTA":"S","SANTO TOME":"S",
+  "VILLA GOBERNADOR GALVEZ":"S","SAN LORENZO":"S","ESPERANZA":"S","CASILDA":"S","CAÑADA DE GOMEZ":"S",
+  "CANADA DE GOMEZ":"S","SUNCHALES":"S","FIRMAT":"S","FUNES":"S","GALVEZ":"S","CARCARAÑA":"S","CARCARANA":"S",
+  "AVELLANEDA SANTA FE":"S","SUARDI":"S","CERES":"S","TOSTADO":"S","LAS PAREJAS":"S","ARMSTRONG":"S",
+  "GRANADERO BAIGORRIA":"S","CAPITAN BERMUDEZ":"S","FRAY LUIS BELTRAN":"S","PUERTO GENERAL SAN MARTIN":"S",
+  "ROLDAN":"S","PEREZ":"S","VILLA CONSTITUCION":"S","SAN JUSTO SANTA FE":"S",
+
+  // Mendoza (M)
+  "MENDOZA":"M","SAN RAFAEL":"M","GODOY CRUZ":"M","MAIPU":"M","LUJAN DE CUYO":"M","TUNUYAN":"M",
+  "MALARGUE":"M","GENERAL ALVEAR":"M","GUAYMALLEN":"M","LAS HERAS":"M","RIVADAVIA":"M","TUPUNGATO":"M",
+  "SAN CARLOS":"M","JUNIN MENDOZA":"M","SANTA ROSA MENDOZA":"M","LA CONSULTA":"M","PALMIRA":"M",
+
+  // San Luis (D)
+  "SAN LUIS":"D","VILLA MERCEDES":"D","MERLO SAN LUIS":"D","LA PUNTA":"D","JUANA KOSLAY":"D","JUSTO DARACT":"D",
+
+  // Tucumán (T)
+  "SAN MIGUEL DE TUCUMAN":"T","TUCUMAN":"T","YERBA BUENA":"T","CONCEPCION":"T","TAFI VIEJO":"T",
+  "BANDA DEL RIO SALI":"T","ALDERETES":"T","AGUILARES":"T","MONTEROS":"T","FAMAILLA":"T","TAFI DEL VALLE":"T",
+
+  // Entre Ríos (E)
+  "PARANA":"E","CONCORDIA":"E","GUALEGUAYCHU":"E","CONCEPCION DEL URUGUAY":"E","GUALEGUAY":"E","VICTORIA":"E",
+  "VILLAGUAY":"E","NOGOYA":"E","CHAJARI":"E","LA PAZ":"E","DIAMANTE":"E","CRESPO":"E","FEDERAL":"E",
+  "COLON":"E","SAN SALVADOR":"E","VILLA ELISA":"E","BASAVILBASO":"E","ROSARIO DEL TALA":"E",
+
+  // Neuquén (Q)
+  "NEUQUEN":"Q","CUTRAL CO":"Q","ZAPALA":"Q","PLOTTIER":"Q","CENTENARIO":"Q","SAN MARTIN DE LOS ANDES":"Q",
+  "VILLA LA ANGOSTURA":"Q","JUNIN DE LOS ANDES":"Q","RINCON DE LOS SAUCES":"Q","CHOS MALAL":"Q","SENILLOSA":"Q",
+  "PLAZA HUINCUL":"Q",
+
+  // Río Negro (R)
+  "VIEDMA":"R","SAN CARLOS DE BARILOCHE":"R","BARILOCHE":"R","GENERAL ROCA":"R","CIPOLLETTI":"R","CINCO SALTOS":"R",
+  "VILLA REGINA":"R","ALLEN":"R","CATRIEL":"R","CHOELE CHOEL":"R","SAN ANTONIO OESTE":"R","RIO COLORADO":"R",
+  "EL BOLSON":"R","INGENIERO HUERGO":"R","CERVANTES":"R",
+
+  // Chubut (U)
+  "RAWSON":"U","COMODORO RIVADAVIA":"U","TRELEW":"U","PUERTO MADRYN":"U","ESQUEL":"U","SARMIENTO":"U",
+  "GAIMAN":"U","TREVELIN":"U","RADA TILLY":"U","DOLAVON":"U",
+
+  // Santa Cruz (Z)
+  "RIO GALLEGOS":"Z","CALETA OLIVIA":"Z","EL CALAFATE":"Z","PICO TRUNCADO":"Z","LAS HERAS SANTA CRUZ":"Z",
+  "PUERTO DESEADO":"Z","PERITO MORENO":"Z","PUERTO SANTA CRUZ":"Z","RIO TURBIO":"Z",
+
+  // La Pampa (L)
+  "SANTA ROSA":"L","GENERAL PICO":"L","TOAY":"L","REALICO":"L","EDUARDO CASTEX":"L","INTENDENTE ALVEAR":"L",
+  "GENERAL ACHA":"L","VICTORICA":"L",
+
+  // Chaco (H)
+  "RESISTENCIA":"H","BARRANQUERAS":"H","PRESIDENCIA ROQUE SAENZ PENA":"H","SAENZ PENA":"H","FONTANA":"H",
+  "VILLA ANGELA":"H","CHARATA":"H","GENERAL SAN MARTIN CHACO":"H","QUITILIPI":"H","MACHAGAI":"H","CASTELLI":"H",
+
+  // Corrientes (W)
+  "CORRIENTES":"W","GOYA":"W","MERCEDES CORRIENTES":"W","PASO DE LOS LIBRES":"W","CURUZU CUATIA":"W",
+  "SANTO TOME CORRIENTES":"W","BELLA VISTA":"W","ESQUINA":"W","MONTE CASEROS":"W","SALADAS":"W","ITUZAINGO CORRIENTES":"W",
+
+  // Misiones (N)
+  "POSADAS":"N","OBERA":"N","ELDORADO":"N","PUERTO IGUAZU":"N","IGUAZU":"N","APOSTOLES":"N","LEANDRO N ALEM":"N",
+  "MONTECARLO":"N","PUERTO RICO":"N","JARDIN AMERICA":"N","SAN VICENTE MISIONES":"N",
+
+  // Formosa (P)
+  "FORMOSA":"P","CLORINDA":"P","PIRANE":"P","EL COLORADO":"P","LAS LOMITAS":"P",
+
+  // Jujuy (Y)
+  "SAN SALVADOR DE JUJUY":"Y","JUJUY":"Y","PALPALA":"Y","PERICO":"Y","LIBERTADOR GENERAL SAN MARTIN":"Y",
+  "SAN PEDRO DE JUJUY":"Y","LA QUIACA":"Y","HUMAHUACA":"Y","TILCARA":"Y","EL CARMEN":"Y",
+
+  // Salta (A)
+  "SALTA":"A","SAN RAMON DE LA NUEVA ORAN":"A","ORAN":"A","TARTAGAL":"A","CAFAYATE":"A","METAN":"A",
+  "GENERAL GUEMES":"A","ROSARIO DE LA FRONTERA":"A","CERRILLOS":"A","EMBARCACION":"A","JOAQUIN V GONZALEZ":"A",
+
+  // Santiago del Estero (G)
+  "SANTIAGO DEL ESTERO":"G","LA BANDA":"G","TERMAS DE RIO HONDO":"G","FRIAS":"G","AÑATUYA":"G","ANATUYA":"G",
+  "QUIMILI":"G","FERNANDEZ":"G","LORETO":"G",
+
+  // Catamarca (K)
+  "SAN FERNANDO DEL VALLE DE CATAMARCA":"K","CATAMARCA":"K","ANDALGALA":"K","BELEN":"K","SANTA MARIA":"K",
+  "RECREO":"K","TINOGASTA":"K",
+
+  // La Rioja (F)
+  "LA RIOJA":"F","CHILECITO":"F","AIMOGASTA":"F","CHAMICAL":"F","CHEPES":"F",
+
+  // San Juan (J)
+  "SAN JUAN":"J","RAWSON SAN JUAN":"J","CHIMBAS":"J","RIVADAVIA SAN JUAN":"J","POCITO":"J","CAUCETE":"J",
+  "SANTA LUCIA":"J","ALBARDON":"J","JACHAL":"J","SAN JOSE DE JACHAL":"J","MEDIA AGUA":"J",
+
+  // Tierra del Fuego (V)
+  "USHUAIA":"V","RIO GRANDE":"V","TOLHUIN":"V"
+};
+
+/* ============================================================
+   Utilidades
+   ============================================================ */
+function normalize(s){
+  return (s||"").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/[.,]/g,"").replace(/\s+/g," ").trim();
+}
+
+// Conjunto de códigos de provincia válidos (para validar el campo State/Province)
+const PROV_CODES = new Set(Object.values(PROV_NAME));
+
+function provinciaDe(city){
+  if(!city) return null;
+  const key = normalize(city);
+  if(CITY_PROV[key]) return CITY_PROV[key];
+  if(PROV_NAME[key]) return PROV_NAME[key];
+  // coincidencia parcial: la localidad contiene un nombre de provincia
+  for(const pn in PROV_NAME){
+    if(key === pn || key.includes(pn)) return PROV_NAME[pn];
+  }
+  // coincidencia parcial con ciudades conocidas (por si trae sufijos)
+  for(const ck in CITY_PROV){
+    if(key.includes(ck) && ck.length >= 5) return CITY_PROV[ck];
+  }
+  return null;
+}
+
+function parseWeight(s){
+  if(!s) return 0;
+  s = String(s).replace(/kg/ig,"").replace(/\s/g,"").trim();
+  if(!s) return 0;
+  if(s.includes(".") && s.includes(",")){           // 27.000,50 -> es-AR
+    s = s.replace(/\./g,"").replace(",",".");
+  } else if(s.includes(",")){                        // 27000,50
+    s = s.replace(",",".");
+  } else if(s.includes(".")){
+    const parts = s.split(".");
+    const last = parts[parts.length-1];
+    if(last.length === 3) s = s.replace(/\./g,"");   // 27.000 -> miles
+    // si no, se deja como decimal
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function fmtKg(n){
+  return Math.round(n).toLocaleString("es-AR");
+}
+
+function fmtFecha(s){
+  if(!s) return null;
+  const m = String(s).match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/);
+  if(!m) return null;
+  let d = m[1].padStart(2,"0");
+  let mo = m[2].padStart(2,"0");
+  let y = m[3];
+  if(y.length === 2) y = "20"+y;
+  return `${d}/${mo}/${y}`;
+}
+
+function fechaTurno(now){
+  now = now || new Date();
+  const dow = now.getDay(); // 0 dom .. 6 sab
+  let target = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let hh, mm;
+  if(dow >= 1 && dow <= 4){            // lun-jue
+    hh = 23; mm = 59;
+  } else if(dow === 5){                // viernes -> mañana (sábado)
+    target.setDate(target.getDate()+1);
+    hh = 15; mm = 0;
+  } else {                             // sábado o domingo -> hoy
+    hh = 15; mm = 0;
+  }
+  const d = String(target.getDate()).padStart(2,"0");
+  const mo = String(target.getMonth()+1).padStart(2,"0");
+  const y = target.getFullYear();
+  return `${d}/${mo}/${y} ${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+}
+
+/* ============================================================
+   Detección de encabezados de transportista
+   ============================================================ */
+const TRIGGER_RE = /(agregar|incorpor|sumar|despach|baja|elimin|sacar|favor|orden(?!\s|$)|turnero|nacional|reemplaz|cambio|saludos|gracias|estimad|adjunt|buenos dias|buenas tardes|por la presente)/i;
+
+function isTransportistaHeader(line){
+  let s = line.trim().replace(/[:.\-]+$/,"").trim();
+  if(s.length < 3 || s.length > 40) return false;
+  if(!/[A-ZÁÉÍÓÚÜÑ]/.test(s)) return false;            // tiene al menos una letra
+  if(/[a-záéíóúüñ]/.test(s)) return false;             // sin minúsculas -> mayúsculas puras
+  if(!/^[A-ZÁÉÍÓÚÜÑ0-9&.\-\s']+$/.test(s)) return false;
+  if(/^\d+$/.test(s)) return false;                    // no es solo número
+  if(/^(AR|KG|CT|WH|DP|C\d{3})$/.test(s)) return false;
+  if(TRIGGER_RE.test(line)) return false;              // no es una frase de instrucción
+  if(normalize(s) === "PBB POLISUR SITE LOGISTICS") return false;
+  if(PROV_NAME[normalize(s)]) return false;            // no es una provincia suelta
+  return true;
+}
+
+/* ============================================================
+   Parser principal
+   ============================================================ */
+function procesar(raw, now){
+  const result = { altas: [], bajas: [], error: null };
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  if(lines.length === 0){ result.error = "No se encontraron órdenes en el texto pegado."; return result; }
+
+  const is8 = s => /^\d{8}$/.test(s);
+  const is9 = s => /^\d{9}$/.test(s);
+  const isDocNo = s => /^\d{9,10}$/.test(s);   // Delivery / SAPOrderNo: 9 o 10 dígitos
+  // Shipment: 8 dígitos cuyo prefijo codifica la campaña (48=2026, 49=2027, 5x=2028+).
+  // Esto descarta números de 8 dígitos que NO son shipment (p.ej. empezados en 30).
+  const SHIP_RE = /^(4[89]|5\d)\d{6}$/;
+  const isShip = s => SHIP_RE.test(s);
+
+  // 1) Detectar inicios de registro estructurado (alta): shipment(48/49/5x) + 9 díg + 9 díg
+  const starts = [];
+  for(let i = 0; i < lines.length - 2; i++){
+    if(isShip(lines[i]) && isDocNo(lines[i+1]) && isDocNo(lines[i+2])) starts.push(i);
+  }
+
+  // 2) Marcar líneas consumidas por registros (ventanas de hasta 20 campos)
+  const consumed = new Set();
+  const recWindows = [];
+  for(let j = 0; j < starts.length; j++){
+    const s = starts[j];
+    const next = (j+1 < starts.length) ? starts[j+1] : lines.length;
+    const end = Math.min(s + 20, next, lines.length);
+    recWindows.push({ start: s, window: lines.slice(s, end) });
+    for(let k = s; k < end; k++) consumed.add(k);
+  }
+
+  // 3) Candidatos a transportista (líneas no consumidas con formato de encabezado)
+  const headers = []; // {idx, name}
+  for(let i = 0; i < lines.length; i++){
+    if(consumed.has(i)) continue;
+    if(isTransportistaHeader(lines[i])){
+      headers.push({ idx:i, name: lines[i].trim().replace(/[:]+$/,"").trim() });
+    }
+  }
+  const transpAntesDe = (idx) => {
+    let name = "";
+    for(const h of headers){ if(h.idx < idx) name = h.name; else break; }
+    return name;
+  };
+
+  // 4) Construir registros de altas y agrupar por shipment
+  const groups = {};
+  const order = [];
+  for(const rw of recWindows){
+    const w = rw.window;
+    const shipment = w[0];
+    const delivery = w[1] || "";   // 9 díg, siempre justo después del shipment
+    const sap = w[2] || "";
+    // Anclar en país "AR" seguido del código de planta (C###). Hacia atrás están,
+    // en orden fijo: State/Province, Ship To Party City, Ship To Party Name.
+    // Robusto ante la AUSENCIA del campo "Our Reference" (que a veces no viene).
+    let arIdx = -1;
+    for(let k = 1; k < w.length - 1; k++){
+      if(/^AR$/i.test(w[k]) && /^C\d{3}$/i.test(w[k+1])){ arIdx = k; break; }
+    }
+    let cliente, city, stateProv;
+    if(arIdx >= 3){
+      cliente   = w[arIdx-3] || "";
+      city      = w[arIdx-2] || "";
+      stateProv = (w[arIdx-1] || "").trim().toUpperCase();
+    } else {                              // respaldo posicional (con Our Reference)
+      cliente   = w[4] || "";
+      city      = w[5] || "";
+      stateProv = (w[6] || "").trim().toUpperCase();
+    }
+    const storageIdx = w.findIndex(x => /^(CT|WH|DP)$/i.test(x));
+    const storage = storageIdx >= 0 ? w[storageIdx].toUpperCase() : null;
+    const kgIdx = w.findIndex(x => /^KG$/i.test(x));
+    let weight = 0, plannedLoad = null;
+    if(kgIdx > 0) weight = parseWeight(w[kgIdx-1]);
+    if(kgIdx >= 0 && w[kgIdx+1]) plannedLoad = w[kgIdx+1];
+    // fallback fecha de carga: buscar primera fecha tras la posición de peso
+    if(!plannedLoad){
+      for(let k = (kgIdx>=0?kgIdx+1:6); k < w.length; k++){
+        if(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/.test(w[k])){ plannedLoad = w[k]; break; }
+      }
+    }
+
+    if(!groups[shipment]){
+      groups[shipment] = {
+        shipment, delivery, sap, cliente, city, stateProv, plannedLoad,
+        transportista: transpAntesDe(rw.start),
+        storages: [], weight: 0, hasUnknownLoc: false
+      };
+      order.push(shipment);
+    }
+    const g = groups[shipment];
+    g.weight += weight;
+    if(storage) g.storages.push(storage);
+    else if(weight > 0) g.hasUnknownLoc = true;  // lote con carga pero sin storage → ubicación desconocida
+    // (lote sin storage y 0 kg → se ignora: no aporta peso ni alocación)
+    if(!g.plannedLoad && plannedLoad) g.plannedLoad = plannedLoad;
+  }
+
+  const fturno = fechaTurno(now);
+  result.altas = order.map(sh => {
+    const g = groups[sh];
+    const set = [...new Set(g.storages)];
+    let aloc = null;
+    if(g.hasUnknownLoc){
+      aloc = null;                       // hay carga (>0 kg) sin storage → no sabemos dónde, sin alocación
+    } else if(set.length){
+      if(set.every(x => x === "DP")) aloc = "Don Pedro";
+      else if(set.every(x => x === "CT" || x === "WH")) aloc = "Planta";
+      else aloc = "Combinada";
+    }
+    return {
+      nroOrden: g.sap || null,
+      shipment: g.shipment || null,
+      delivery: g.delivery || null,
+      tipoUnidad: g.weight > 27000 ? "22 pallets" : "Standard",
+      fechaTurno: fturno,
+      alocacion: aloc,
+      cliente: g.cliente || null,
+      transporte: g.transportista || "",
+      localidad: g.city || null,
+      // Provincia: se deduce de la localidad (regla principal). Si la localidad no
+      // está en la tabla, se usa como respaldo el código State/Province del propio dato.
+      provincia: provinciaDe(g.city) || (PROV_CODES.has(g.stateProv) ? g.stateProv : null),
+      fechaCarga: fmtFecha(g.plannedLoad),
+      totalKg: g.weight
+    };
+  });
+
+  // 5) BAJAS — formato tipo turnero. Ancla: "SAP - Shipment" o números separados en contexto de baja.
+  const bajas = [];
+  const seen = new Set();
+  const SECTOR_RE = /(DON\s*PEDRO|PLANTA)/i;
+  const DATE_RE = /\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:\s+\d{1,2}[:.]\d{2})?/;
+
+  function pushBaja(sap, shipment, idx){
+    const key = (sap||"") + "|" + (shipment||"");
+    if(seen.has(key)) return;
+    seen.add(key);
+    // ventana de contexto alrededor de la referencia
+    const lo = Math.max(0, idx-1), hi = Math.min(lines.length, idx+6);
+    let sector = null, fecha = null, cliente = null;
+    const transp = transpAntesDe(idx) || transpAntesDe(idx+3);
+    for(let k = lo; k < hi; k++){
+      const ln = lines[k];
+      if(sector === null){ const ms = ln.match(SECTOR_RE); if(ms) sector = /DON/i.test(ms[1]) ? "Don Pedro" : "Planta"; }
+      if(fecha === null && k > idx){ const md = ln.match(DATE_RE); if(md) fecha = md[0].replace(/\s+/g," ").trim(); }
+    }
+    // cliente: línea cercana con texto, que no sea sector/fecha/header/ref/numérica
+    for(let k = idx-1; k <= idx+4; k++){
+      if(k < 0 || k >= lines.length || k === idx) continue;
+      const ln = lines[k];
+      if(!/[A-Za-zÁÉÍÓÚÑ]/.test(ln)) continue;
+      if(SECTOR_RE.test(ln)) continue;
+      if(/^\d/.test(ln) && /\d{6,}/.test(ln)) continue;
+      if(transp && normalize(ln) === normalize(transp)) continue;
+      if(TRIGGER_RE.test(ln)) continue;
+      cliente = ln.replace(/[:.\-]+$/,"").trim();
+      break;
+    }
+    bajas.push({
+      transportista: transp || null,
+      sap: sap || null,
+      shipment: shipment || null,
+      cliente: cliente || null,
+      sector: sector || null,
+      fecha: fecha || null
+    });
+  }
+
+  // 5a) Referencias con guion: "118874430 - 48250095"
+  const DASH_RE = /(\d{8,9})\s*[-–—]\s*(\d{8,9})/;
+  for(let i = 0; i < lines.length; i++){
+    if(consumed.has(i)) continue;
+    const m = lines[i].match(DASH_RE);
+    if(m){
+      const a = m[1], b = m[2];
+      let sap, shipment;
+      // El shipment es el token de 8 díg con prefijo de campaña; el SAP es el de 9 díg.
+      if(isShip(a)){ shipment = a; sap = b; }
+      else if(isShip(b)){ shipment = b; sap = a; }
+      else if(a.length === 9){ sap = a; shipment = b; }
+      else { sap = b; shipment = a; }
+      pushBaja(sap, shipment, i);
+    }
+  }
+
+  // 5b) Bajas con SAP/Shipment en líneas separadas, dentro de una sección de baja
+  const isBajaPhrase = ln => /(dar de baja|no\s+despachar|despachar?\s+no|eliminar|sacar\s+orden|no\s+despacha)/i.test(ln)
+                            || /(no despachar|baja)/i.test(ln);
+  let bajaMode = false;
+  for(let i = 0; i < lines.length; i++){
+    const ln = lines[i];
+    if(/(dar de baja|no\s+despachar|eliminar orden|sacar orden|por favor no despachar)/i.test(ln)) bajaMode = true;
+    if(/(agregar|incorpor|sumar orden|en su lugar)/i.test(ln)) bajaMode = false;
+    if(!bajaMode) continue;
+    if(consumed.has(i)) continue;
+    // 9 dígitos (SAP) seguido cerca por 8 dígitos (shipment), en líneas separadas
+    if(is9(ln)){
+      for(let k = i+1; k <= i+3 && k < lines.length; k++){
+        if(isShip(lines[k]) && !consumed.has(k)){
+          pushBaja(ln, lines[k], i);
+          break;
+        }
+      }
+    }
+  }
+
+  result.bajas = bajas;
+
+  if(result.altas.length === 0 && result.bajas.length === 0){
+    result.error = "No se encontraron órdenes en el texto pegado.";
+  }
+  return result;
+}
+
+/* ============================================================
+   Render
+   ============================================================ */
+const $ = sel => document.querySelector(sel);
+const resultsEl = $("#results");
+
+function el(tag, cls, txt){
+  const e = document.createElement(tag);
+  if(cls) e.className = cls;
+  if(txt != null) e.textContent = txt;
+  return e;
+}
+
+function showToast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove("show"), 1300);
+}
+
+async function copyText(text, btn){
+  const value = (text == null) ? "" : String(text);
+  // Usar el documento/ventana donde vive el botón. Clave para la ventana flotante (PiP):
+  // ahí el documento enfocado es el de la PiP, no el principal.
+  const doc = (btn && btn.ownerDocument) ? btn.ownerDocument : document;
+  const win = doc.defaultView || window;
+
+  function legacyCopy(){
+    const ta = doc.createElement("textarea");
+    ta.value = value;
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.left = "0"; ta.style.opacity = "0";
+    doc.body.appendChild(ta);
+    ta.focus(); ta.select();
+    let ok = false;
+    try { ok = doc.execCommand("copy"); } catch(_){ ok = false; }
+    doc.body.removeChild(ta);
+    return ok;
+  }
+
+  let ok = false;
+  try{
+    if(win.navigator && win.navigator.clipboard && win.isSecureContext){
+      try { win.focus(); } catch(_){}
+      await win.navigator.clipboard.writeText(value);
+      ok = true;
+    } else {
+      ok = legacyCopy();
+    }
+  }catch(e){
+    ok = legacyCopy();   // p.ej. "document not focused" → fallback execCommand en el doc correcto
+  }
+
+  if(ok){
+    if(btn){
+      btn.textContent = "✅"; btn.classList.add("done");
+      setTimeout(() => { btn.textContent = "📋"; btn.classList.remove("done"); }, 1100);
+    }
+    showToast("Copiado ✅");
+  } else {
+    showToast("No se pudo copiar");
+  }
+}
+
+function fieldRow(label, value, opts){
+  opts = opts || {};
+  const row = el("div", "frow");
+  row.appendChild(el("div", "lab", label));
+  let getValue;
+  if(opts.editable){
+    const inp = el("input", "transp");
+    inp.type = "text"; inp.value = value || ""; inp.placeholder = "Sin detectar — completar";
+    row.appendChild(inp);
+    getValue = () => inp.value;
+  } else {
+    const detected = value != null && value !== "";
+    const v = el("div", "val" + (detected ? "" : " nd"), detected ? value : "[no detectado]");
+    row.appendChild(v);
+    getValue = () => (detected ? value : "");
+  }
+  const btn = el("button", "copybtn", "📋");
+  btn.type = "button";
+  btn.addEventListener("click", () => copyText(getValue(), btn));
+  row.appendChild(btn);
+  return row;
+}
+
+function render(res){
+  resultsEl.innerHTML = "";
+
+  if(res.error){
+    const box = el("div", "error-box");
+    box.appendChild(el("span", "ico", "🔍"));
+    box.appendChild(el("div", null, res.error));
+    resultsEl.appendChild(box);
+    return;
+  }
+
+  // ---- BAJAS ----
+  if(res.bajas.length){
+    const sec = el("div", "section");
+    const h = el("h2", null, "Órdenes a DAR DE BAJA en ALET");
+    h.prepend(document.createTextNode(""));
+    const pill = el("span", "count-pill", res.bajas.length + (res.bajas.length===1?" orden":" órdenes"));
+    h.appendChild(pill);
+    sec.appendChild(h);
+
+    const box = el("div", "bajas-box");
+    res.bajas.forEach(b => {
+      const row = el("div", "baja-row");
+      row.appendChild(el("span", "badge-baja", "BAJA"));
+      if(b.transportista) row.appendChild(el("div", "baja-transp", b.transportista));
+      const add = (k, v) => {
+        const f = el("div", "baja-field");
+        f.appendChild(el("span", "k", k));
+        f.appendChild(el("span", "v" , v || "[no detectado]"));
+        if(!v) f.querySelector(".v").style.color = "var(--danger)";
+        row.appendChild(f);
+      };
+      add("SAP", b.sap);
+      add("Shipment", b.shipment);
+      add("Cliente", b.cliente);
+      add("Sector", b.sector);
+      add("Fecha turno", b.fecha);
+      box.appendChild(row);
+    });
+    sec.appendChild(box);
+    resultsEl.appendChild(sec);
+  }
+
+  // ---- ALTAS ----
+  if(res.altas.length){
+    const sec = el("div", "section");
+    const h = el("h2", null, "Órdenes a AGREGAR en ALET");
+    const pill = el("span", "count-pill", res.altas.length + (res.altas.length===1?" orden":" órdenes"));
+    h.appendChild(pill);
+    sec.appendChild(h);
+
+    const cont = el("div", "altas-cards");
+    res.altas.forEach((a, i) => {
+      const card = el("div", "alta-card");
+
+      const head = el("div", "alta-head");
+      head.appendChild(el("div", "ord-n", `Orden ${i+1} de ${res.altas.length}`));
+      head.appendChild(el("span", "badge-alta", "ALTA"));
+      card.appendChild(head);
+
+      const fields = el("div", "fields");
+      fields.appendChild(fieldRow("Nro. orden", a.nroOrden));
+      fields.appendChild(fieldRow("Shipment", a.shipment));
+      fields.appendChild(fieldRow("Delivery", a.delivery));
+      fields.appendChild(fieldRow("Tipo de unidad", a.tipoUnidad));
+      fields.appendChild(fieldRow("Fecha/Turno", a.fechaTurno));
+      fields.appendChild(fieldRow("Alocación", a.alocacion));
+      fields.appendChild(fieldRow("Cliente", a.cliente));
+      fields.appendChild(fieldRow("Transporte", a.transporte, { editable:true }));
+      fields.appendChild(fieldRow("Localidad", a.localidad));
+      fields.appendChild(fieldRow("Provincia", a.provincia));
+      fields.appendChild(fieldRow("Fecha plan. carga", a.fechaCarga));
+      card.appendChild(fields);
+
+      const foot = el("div", "alta-foot");
+      const kg = el("div", "totalkg");
+      kg.innerHTML = `<span>Total KG:</span> ${fmtKg(a.totalKg)}`;
+      foot.appendChild(kg);
+      let badgeCls = "aloc-nd", badgeTxt = "Sin alocación";
+      if(a.alocacion === "Planta"){ badgeCls = "aloc-planta"; badgeTxt = "Planta"; }
+      else if(a.alocacion === "Don Pedro"){ badgeCls = "aloc-dp"; badgeTxt = "Don Pedro"; }
+      else if(a.alocacion === "Combinada"){ badgeCls = "aloc-comb"; badgeTxt = "Combinada"; }
+      foot.appendChild(el("span", "aloc-badge " + badgeCls, badgeTxt));
+      card.appendChild(foot);
+
+      cont.appendChild(card);
+    });
+    sec.appendChild(cont);
+    resultsEl.appendChild(sec);
+  }
+}
+
+/* ============================================================
+   Eventos
+   ============================================================ */
+/* ============================================================
+   Ventana flotante always-on-top (Document Picture-in-Picture)
+   ============================================================ */
+const PIP_OK = ("documentPictureInPicture" in window);
+const btnFloat = $("#btnFloat");
+let pipWin = null;
+let suppressRestore = false;
+
+function copyStylesTo(win){
+  document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => {
+    win.document.head.appendChild(node.cloneNode(true));
+  });
+  win.document.documentElement.lang = "es";
+}
+
+function floatNote(){
+  const n = el("div", "floating-note");
+  n.appendChild(el("span", "ico", "⧉"));
+  n.appendChild(el("div", null, "Resultados abiertos en la ventana flotante."));
+  n.appendChild(el("div", null, "Cerrala para traerlos de vuelta acá."));
+  return n;
+}
+
+function setFloatBtn(){
+  if(!PIP_OK){ btnFloat.hidden = true; return; }
+  const hasContent = resultsEl.querySelector(".alta-card, .bajas-box");
+  btnFloat.hidden = !(hasContent || pipWin);
+  if(pipWin){ btnFloat.textContent = "⧉ Flotando…"; btnFloat.disabled = true; }
+  else { btnFloat.textContent = "⧉ Flotar encima"; btnFloat.disabled = false; }
+}
+
+async function flotarEncima(){
+  if(!PIP_OK || pipWin) return;
+  try{
+    // Alto generoso (acotado a la pantalla) para que una orden entre entera sin scroll.
+    const h = Math.min(820, (window.screen && window.screen.availHeight ? window.screen.availHeight - 80 : 820));
+    pipWin = await documentPictureInPicture.requestWindow({ width: 430, height: h });
+  }catch(e){ pipWin = null; return; }
+
+  copyStylesTo(pipWin);
+  pipWin.document.body.style.margin = "0";
+  pipWin.document.body.classList.add("pip");   // activa el modo compacto del CSS
+  const host = pipWin.document.createElement("div");
+  host.className = "wrap";
+  const title = el("div", "pip-title");
+  const dot = el("span", "dot", "DOW"); title.appendChild(dot);
+  title.appendChild(document.createTextNode("Órdenes DOW"));
+  host.appendChild(title);
+  // mover el contenido real (conserva los listeners de copiar)
+  while(resultsEl.firstChild) host.appendChild(resultsEl.firstChild);
+  pipWin.document.body.appendChild(host);
+  resultsEl.appendChild(floatNote());
+  setFloatBtn();
+
+  pipWin.addEventListener("pagehide", () => {
+    pipWin = null;
+    if(suppressRestore){ suppressRestore = false; setFloatBtn(); return; }
+    resultsEl.innerHTML = "";
+    while(host.firstChild){
+      if(host.firstChild.classList && host.firstChild.classList.contains("pip-title")){ host.removeChild(host.firstChild); continue; }
+      resultsEl.appendChild(host.firstChild);
+    }
+    setFloatBtn();
+  });
+}
+
+btnFloat.addEventListener("click", flotarEncima);
+
+/* ============================================================
+   Selector de transportista (autollena el Transporte de todas)
+   ============================================================ */
+const TRANSPORTISTAS = ["Don Pedro", "Petrolera", "El Aguilucho", "Celsur"];
+let selectedTransp = "";
+const chipsEl = $("#transpChips");
+
+function applyTranspToCards(){
+  if(!selectedTransp) return;   // al apagar no borramos lo ya editado
+  document.querySelectorAll("input.transp").forEach((inp) => { inp.value = selectedTransp; });
+  if(pipWin) pipWin.document.querySelectorAll("input.transp").forEach((inp) => { inp.value = selectedTransp; });
+}
+
+TRANSPORTISTAS.forEach((name) => {
+  const chip = el("button", "chip", name);
+  chip.type = "button";
+  chip.addEventListener("click", () => {
+    selectedTransp = (selectedTransp === name) ? "" : name;
+    chipsEl.querySelectorAll(".chip").forEach((c) => c.classList.toggle("sel", c.textContent === name && selectedTransp === name));
+    applyTranspToCards();
+  });
+  chipsEl.appendChild(chip);
+});
+
+/* ============================================================
+   Botones principales
+   ============================================================ */
+$("#btnProc").addEventListener("click", () => {
+  if(pipWin){ suppressRestore = true; pipWin.close(); pipWin = null; }
+  const raw = $("#input").value;
+  if(!raw.trim()){
+    render({ altas:[], bajas:[], error:"Pegá primero el texto del mail." });
+    setFloatBtn();
+    return;
+  }
+  const res = procesar(raw, new Date());
+  if(selectedTransp) res.altas.forEach((a) => { a.transporte = selectedTransp; });
+  render(res);
+  setFloatBtn();
+  if(!res.error){
+    resultsEl.scrollIntoView({ behavior:"smooth", block:"start" });
+  }
+});
+
+$("#btnClear").addEventListener("click", () => {
+  if(pipWin){ suppressRestore = true; pipWin.close(); pipWin = null; }
+  $("#input").value = "";
+  resultsEl.innerHTML = "";
+  setFloatBtn();
+  $("#input").focus();
+});
+
+/* ============================================================
+   Service Worker (PWA offline)
+   ============================================================ */
+if("serviceWorker" in navigator){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
