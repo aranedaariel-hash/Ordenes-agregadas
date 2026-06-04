@@ -1,6 +1,7 @@
 # Artefactos de prueba local (no van al deploy)
 _serve.js
 _expo_*.js
+_test_*.js
 .__chk.js
 salida_expo/
 
@@ -8,6 +9,8 @@ salida_expo/
 *.xlsx
 *.xls
 *.png
+# Plantilla ALET sí va al repo (no tiene datos reales)
+!_alet_template.xlsx
 
 # Dependencias / build
 node_modules/

@@ -1140,6 +1140,18 @@ async function readZipText(zip, name){
   else throw new Error("Método ZIP no soportado: " + e.method);
   return new TextDecoder().decode(raw);
 }
+async function readZipBytes(zip, name){
+  const e = zip.entries[name];
+  if(!e) return null;
+  const lh = e.localOffset;
+  const nameLen = zip.dv.getUint16(lh + 26, true);
+  const extraLen = zip.dv.getUint16(lh + 28, true);
+  const dataStart = lh + 30 + nameLen + extraLen;
+  const comp = zip.bytes.subarray(dataStart, dataStart + e.compSize);
+  if(e.method === 0) return comp;
+  if(e.method === 8) return await inflateRaw(comp);
+  throw new Error("Método ZIP no soportado: " + e.method);
+}
 function colToIndex(ref){
   const m = /^([A-Za-z]+)/.exec(ref);
   if(!m) return -1;
@@ -1234,14 +1246,12 @@ const CRC_TABLE = (() => {
 function crc32(bytes){ let c=0xFFFFFFFF; for(let i=0;i<bytes.length;i++) c=CRC_TABLE[(c^bytes[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
 function escXml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;"); }
 function cellRef(colIdx, rowNum){ let s=""; let n=colIdx+1; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); } return s+rowNum; }
-/* Construye un .xlsx ESTÁNDAR (estilos + sharedStrings + docProps + dimension),
-   como el que produce cualquier librería de Office. ALET rechaza los xlsx mínimos
-   (solo inlineStr, sin styles/sharedStrings/docProps) con "error de formato"; este
-   formato completo evita ese error.
+/* Construye un .xlsx usando _alet_template.xlsx como base estructural (theme, printer
+   settings, worksheet rels, etc.) y reemplaza solo sheet1 y sharedStrings con los datos.
    rows: array de filas; cada fila es un objeto { colIdx(0-based): valorTexto }.
    Celdas vacías o nulas se omiten. */
-function buildStandardXlsx(rows, sheetName){
-  // tabla de cadenas compartidas
+async function buildStandardXlsx(rows, sheetName){
+  // Tabla de cadenas compartidas
   const sst = [], sstIndex = new Map(); let totalRefs = 0;
   const intern = (s) => {
     s = String(s);
@@ -1249,7 +1259,7 @@ function buildStandardXlsx(rows, sheetName){
     if(i === undefined){ i = sst.length; sst.push(s); sstIndex.set(s, i); }
     totalRefs++; return i;
   };
-  // filas + dimensión
+  // Filas + dimensión
   let minC = Infinity, maxC = -Infinity, maxR = 0, rowsXml = "";
   rows.forEach((cells, ri) => {
     const rowNum = ri + 1;
@@ -1271,6 +1281,24 @@ function buildStandardXlsx(rows, sheetName){
     `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
     `<dimension ref="${dim}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews>` +
     `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData>${rowsXml}</sheetData></worksheet>`;
+
+  // Intentar con plantilla estructural (garantiza compatibilidad con ALET)
+  try {
+    const resp = await fetch("_alet_template.xlsx");
+    if(resp.ok){
+      const tzip = await unzip(await resp.arrayBuffer());
+      const emptySheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/></worksheet>`;
+      const overrides = { "xl/worksheets/sheet1.xml": sheetXml, "xl/sharedStrings.xml": sstXml };
+      if(tzip.entries["xl/worksheets/sheet2.xml"]) overrides["xl/worksheets/sheet2.xml"] = emptySheet;
+      const files = [];
+      for(const name of Object.keys(tzip.entries)){
+        files.push({ name, data: overrides[name] !== undefined ? overrides[name] : await readZipBytes(tzip, name) });
+      }
+      return zipStore(files);
+    }
+  } catch(e){ /* plantilla no disponible, caer al modo standalone */ }
+
+  // Fallback: estructura standalone (sin template)
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
     `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
     `<fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>` +
