@@ -16,9 +16,11 @@ cargar en **ALET**, con botón de copiado por campo.
   externa* (AL) y *Centro de distribución* (AN) se dejan vacíos (ALET los pide al confirmar).
 
 > **Formato del .xlsx**: ambos exports (Expo y Manual) generan un workbook **estándar**
-> (`styles.xml` + `sharedStrings.xml` + `docProps` + `<dimension>`), no un xlsx mínimo. El lector
-> de ALET es estricto y rechaza con "error de formato" los archivos que solo traen celdas
-> `inlineStr` sin esas partes. Generado 100% en el navegador, sin dependencias.
+> (`styles.xml` + `sharedStrings.xml` + `docProps` + `<dimension>`) y **comprimido con DEFLATE**
+> (`CompressionStream`), igual que un Excel real. ALET valida el tipo con `finfo`/libmagic: un
+> xlsx mínimo (celdas `inlineStr`, sin esas partes) **o sin comprimir (STORED)** se detecta como
+> `application/zip` y se rechaza con "formato de archivo incorrecto". Generado 100% en el
+> navegador (Chrome/Edge), sin dependencias.
 - **Bajas**: lista las órdenes a eliminar en ALET (transportista, SAP, shipment, cliente, sector, fecha).
 - **Selector de transportista**: autollena el campo Transporte de todas las órdenes.
 

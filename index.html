@@ -909,10 +909,12 @@ function render(res){
     const expBar = el("div", "altas-export");
     const btnExp = el("button", "btn-primary altas-expbtn", "⬇️ Exportar Excel (import Manual ALET)");
     btnExp.type = "button";
-    btnExp.addEventListener("click", () => {
+    btnExp.addEventListener("click", async () => {
       const d = new Date();
       const stamp = `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
-      downloadXlsx(buildXlsxAltas(res.altas), `Preingresos ALET ${stamp}.xlsx`);
+      btnExp.disabled = true;
+      try{ downloadXlsx(await buildXlsxAltas(res.altas), `Preingresos ALET ${stamp}.xlsx`); }
+      finally{ btnExp.disabled = false; }
     });
     expBar.appendChild(btnExp);
     expBar.appendChild(el("div", "altas-exphint", "Genera un .xlsx con una orden por fila para el modo «Origen: Manual» de Importación de preingresos. Centro de distribución y Carga combinada externa van vacíos (ALET los pedirá al confirmar)."));
@@ -1089,6 +1091,12 @@ $("#btnClear").addEventListener("click", () => {
 async function inflateRaw(bytes){
   const ds = new DecompressionStream("deflate-raw");
   const stream = new Blob([bytes]).stream().pipeThrough(ds);
+  const b = await new Response(stream).arrayBuffer();
+  return new Uint8Array(b);
+}
+async function deflateRaw(bytes){
+  const cs = new CompressionStream("deflate-raw");
+  const stream = new Blob([bytes]).stream().pipeThrough(cs);
   const b = await new Response(stream).arrayBuffer();
   return new Uint8Array(b);
 }
@@ -1284,24 +1292,27 @@ function buildStandardXlsx(rows, sheetName){
   ];
   return zipStore(files);
 }
-function zipStore(files){
+// ZIP con compresión DEFLATE (method 8), igual que un Excel real. Importante:
+// un xlsx STORED (sin comprimir) suele detectarse como application/zip por finfo/libmagic
+// y ALET lo rechaza con "formato de archivo incorrecto".
+async function zipStore(files){
   const enc = new TextEncoder(); const parts = []; const central = []; let offset = 0;
   const push = (u8) => { parts.push(u8); offset += u8.length; };
   const u16 = (n)=>{ const b=new Uint8Array(2); new DataView(b.buffer).setUint16(0,n,true); return b; };
   const u32 = (n)=>{ const b=new Uint8Array(4); new DataView(b.buffer).setUint32(0,n>>>0,true); return b; };
   for(const f of files){
     const nameBytes = enc.encode(f.name);
-    const data = (f.data instanceof Uint8Array) ? f.data : enc.encode(f.data);
-    const crc = crc32(data); const localOffset = offset;
-    push(u32(0x04034b50)); push(u16(20)); push(u16(0)); push(u16(0)); push(u16(0)); push(u16(0));
-    push(u32(crc)); push(u32(data.length)); push(u32(data.length));
-    push(u16(nameBytes.length)); push(u16(0)); push(nameBytes); push(data);
-    central.push({ nameBytes, crc, size:data.length, localOffset });
+    const raw = (f.data instanceof Uint8Array) ? f.data : enc.encode(f.data);
+    const crc = crc32(raw); const comp = await deflateRaw(raw); const localOffset = offset;
+    push(u32(0x04034b50)); push(u16(20)); push(u16(0)); push(u16(8)); push(u16(0)); push(u16(0));
+    push(u32(crc)); push(u32(comp.length)); push(u32(raw.length));
+    push(u16(nameBytes.length)); push(u16(0)); push(nameBytes); push(comp);
+    central.push({ nameBytes, crc, compSize:comp.length, size:raw.length, localOffset });
   }
   const cdStart = offset;
   for(const c of central){
-    push(u32(0x02014b50)); push(u16(20)); push(u16(20)); push(u16(0)); push(u16(0)); push(u16(0)); push(u16(0));
-    push(u32(c.crc)); push(u32(c.size)); push(u32(c.size));
+    push(u32(0x02014b50)); push(u16(20)); push(u16(20)); push(u16(0)); push(u16(8)); push(u16(0)); push(u16(0));
+    push(u32(c.crc)); push(u32(c.compSize)); push(u32(c.size));
     push(u16(c.nameBytes.length)); push(u16(0)); push(u16(0)); push(u16(0)); push(u16(0)); push(u32(0));
     push(u32(c.localOffset)); push(c.nameBytes);
   }
@@ -1403,9 +1414,9 @@ function downloadXlsx(bytes, filename){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
-function genAndDownload(group){
+async function genAndDownload(group){
   const withHeader = $("#expoHeader").checked;
-  downloadXlsx(buildXlsx(group.orders, withHeader), `Expo ${fileD(group.date)}.xlsx`);
+  downloadXlsx(await buildXlsx(group.orders, withHeader), `Expo ${fileD(group.date)}.xlsx`);
 }
 function renderExpo(groups, sheetName){
   expoResultsEl.innerHTML = "";
