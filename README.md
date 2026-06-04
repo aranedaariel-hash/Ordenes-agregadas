@@ -11,6 +11,14 @@ cargar en **ALET**, con botón de copiado por campo.
   Localidad, Provincia y Fecha planeada de carga.
 - **Bajas**: lista las órdenes a eliminar en ALET (transportista, SAP, shipment, cliente, sector, fecha).
 - **Selector de transportista**: autollena el campo Transporte de todas las órdenes.
+
+### Turnero Expo (Excel → ALET)
+
+Pestaña **"Turnero Expo"**: se arrastra el Excel del turnero de exportación (el archivo original
+multi-hoja sirve tal cual — detecta sola la hoja del turnero) y genera **un .xlsx por fecha** con
+los datos en las columnas que pide la importación de preingresos de ALET (Origen: Exportación):
+Shipment → B, N° orden → D, Cliente → E, Transporte → N. Todo el armado del xlsx es en el navegador,
+sin dependencias.
 - **Robustez**: aguanta campos faltantes (Our Reference / Storage Location / Batch Number),
   Nro. de orden de 9 o 10 dígitos, y pesos en formato `28.500,000`.
 

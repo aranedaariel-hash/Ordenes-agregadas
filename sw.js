@@ -1,7 +1,7 @@
 /* Service Worker — Procesador de Órdenes DOW
    Estrategia network-first: online trae siempre lo último (las actualizaciones se ven
    al recargar); offline sirve lo cacheado. Subir CACHE al cambiar archivos. */
-const CACHE = "turnero-dow-v4";
+const CACHE = "turnero-dow-v6";
 const ASSETS = [
   "./",
   "./index.html",

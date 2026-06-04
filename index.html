@@ -203,6 +203,33 @@
   }
   .error-box .ico{font-size:1.8rem;display:block;margin-bottom:8px;}
   .hidden{display:none;}
+  /* Tabs */
+  .tabs{display:flex;gap:6px;margin-bottom:16px;background:var(--panel2);padding:5px;border-radius:12px;border:1px solid var(--line);}
+  .tab{flex:1;background:transparent;color:var(--muted);border:none;border-radius:9px;padding:11px 10px;font-size:.9rem;font-weight:600;cursor:pointer;}
+  .tab.sel{background:var(--accent);color:#fff;}
+  /* Dropzone */
+  .dropzone{
+    border:2px dashed var(--line);border-radius:12px;background:var(--panel2);
+    padding:30px 18px;text-align:center;cursor:pointer;transition:border-color .15s ease,background .15s ease;
+  }
+  .dropzone:hover,.dropzone.drag{border-color:var(--accent);background:rgba(47,128,237,.08);}
+  .dz-ico{font-size:1.8rem;display:block;margin-bottom:8px;}
+  .dz-main{font-size:.95rem;font-weight:600;}
+  .dz-sub{font-size:.78rem;color:var(--muted);margin-top:6px;}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:.84rem;color:var(--muted);cursor:pointer;}
+  .chk input{width:16px;height:16px;accent-color:var(--accent);}
+  /* Resultados expo */
+  .expo-summary{font-size:.9rem;color:var(--muted);margin:18px 2px 10px;}
+  .expo-allbtn{margin:0 0 14px;}
+  .date-card{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 16px;margin-bottom:10px;
+  }
+  .date-card .dc-info{display:flex;flex-direction:column;gap:2px;}
+  .date-card .dc-date{font-weight:700;font-size:1rem;}
+  .date-card .dc-sub{font-size:.78rem;color:var(--muted);}
+  .btn-dl{background:var(--green);color:#fff;border:none;border-radius:9px;padding:10px 16px;font-weight:600;font-size:.85rem;cursor:pointer;}
+  .btn-dl:hover{filter:brightness(1.08);}
   .toast{
     position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
     background:var(--green);color:#fff;padding:11px 20px;border-radius:30px;font-size:.86rem;font-weight:600;
@@ -226,21 +253,41 @@
     </div>
   </header>
 
-  <div class="card-input">
-    <div class="transp-pick">
-      <span class="pick-lbl">Transporte para todas las órdenes <span class="opt">(opcional)</span></span>
-      <div class="chips" id="transpChips"></div>
-    </div>
-    <label class="fld" for="input">Pegá el texto del mail acá</label>
-    <textarea id="input" placeholder="Pegá acá el contenido del mail de Turnero nacional (altas y/o bajas)…" spellcheck="false"></textarea>
-    <div class="btnrow">
-      <button class="btn-primary" id="btnProc">Procesar</button>
-      <button class="btn-ghost" id="btnClear">Limpiar</button>
-      <button class="btn-float" id="btnFloat" hidden>⧉ Flotar encima</button>
-    </div>
+  <div class="tabs">
+    <button class="tab sel" id="tabNacional">Turnero Nacional</button>
+    <button class="tab" id="tabExpo">Turnero Expo</button>
   </div>
 
-  <div id="results"></div>
+  <div id="modeNacional">
+    <div class="card-input">
+      <div class="transp-pick">
+        <span class="pick-lbl">Transporte para todas las órdenes <span class="opt">(opcional)</span></span>
+        <div class="chips" id="transpChips"></div>
+      </div>
+      <label class="fld" for="input">Pegá el texto del mail acá</label>
+      <textarea id="input" placeholder="Pegá acá el contenido del mail de Turnero nacional (altas y/o bajas)…" spellcheck="false"></textarea>
+      <div class="btnrow">
+        <button class="btn-primary" id="btnProc">Procesar</button>
+        <button class="btn-ghost" id="btnClear">Limpiar</button>
+        <button class="btn-float" id="btnFloat" hidden>⧉ Flotar encima</button>
+      </div>
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <div id="modeExpo" hidden>
+    <div class="card-input">
+      <label class="fld">Excel del Turnero de Exportación</label>
+      <div class="dropzone" id="expoDrop">
+        <input type="file" id="expoFile" accept=".xlsx" hidden>
+        <span class="dz-ico">📄⬇️</span>
+        <div class="dz-main">Arrastrá el <b>.xlsx</b> acá o tocá para elegirlo</div>
+        <div class="dz-sub">Se genera un Excel por fecha con Shipment · N° orden · Cliente · Transporte</div>
+      </div>
+      <label class="chk"><input type="checkbox" id="expoHeader"> Incluir fila de encabezado en los Excel generados</label>
+    </div>
+    <div id="expoResults"></div>
+  </div>
 
   <footer class="foot">Herramienta interna · sin envío de datos · todo se procesa en tu dispositivo</footer>
 </div>
@@ -1014,6 +1061,325 @@ $("#btnClear").addEventListener("click", () => {
   setFloatBtn();
   $("#input").focus();
 });
+
+/* ============================================================
+   TURNERO EXPO — motor: lee xlsx, agrupa por fecha, arma xlsx por fecha
+   ============================================================ */
+async function inflateRaw(bytes){
+  const ds = new DecompressionStream("deflate-raw");
+  const stream = new Blob([bytes]).stream().pipeThrough(ds);
+  const b = await new Response(stream).arrayBuffer();
+  return new Uint8Array(b);
+}
+async function unzip(arrayBuffer){
+  const dv = new DataView(arrayBuffer);
+  const bytes = new Uint8Array(arrayBuffer);
+  let eocd = -1;
+  for(let i = arrayBuffer.byteLength - 22; i >= 0; i--){
+    if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  }
+  if(eocd < 0) throw new Error("No es un .xlsx válido (ZIP)");
+  const cdCount = dv.getUint16(eocd + 10, true);
+  const cdOffset = dv.getUint32(eocd + 16, true);
+  const entries = {};
+  let p = cdOffset;
+  for(let n = 0; n < cdCount; n++){
+    if(dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const localOffset = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    entries[name] = { method, compSize, localOffset };
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return { dv, bytes, entries };
+}
+async function readZipText(zip, name){
+  const e = zip.entries[name];
+  if(!e) return null;
+  const lh = e.localOffset;
+  const nameLen = zip.dv.getUint16(lh + 26, true);
+  const extraLen = zip.dv.getUint16(lh + 28, true);
+  const dataStart = lh + 30 + nameLen + extraLen;
+  const comp = zip.bytes.subarray(dataStart, dataStart + e.compSize);
+  let raw;
+  if(e.method === 0) raw = comp;
+  else if(e.method === 8) raw = await inflateRaw(comp);
+  else throw new Error("Método ZIP no soportado: " + e.method);
+  return new TextDecoder().decode(raw);
+}
+function colToIndex(ref){
+  const m = /^([A-Za-z]+)/.exec(ref);
+  if(!m) return -1;
+  let idx = 0;
+  for(const ch of m[1].toUpperCase()) idx = idx * 26 + (ch.charCodeAt(0) - 64);
+  return idx - 1;
+}
+function unescapeXml(s){
+  return s.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"')
+          .replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n))
+          .replace(/&amp;/g,"&");
+}
+function parseSharedStrings(xml){
+  const out = [];
+  if(!xml) return out;
+  const siRe = /<si\b[^>]*>([\s\S]*?)<\/si>/g; let m;
+  while((m = siRe.exec(xml))){
+    let val = ""; const tRe = /<t\b[^>]*>([\s\S]*?)<\/t>/g; let tm;
+    while((tm = tRe.exec(m[1]))) val += unescapeXml(tm[1]);
+    out.push(val);
+  }
+  return out;
+}
+function parseSheet(xml, shared){
+  const rows = [];
+  const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/g; let rm;
+  while((rm = rowRe.exec(xml))){
+    const inner = rm[1]; const cells = []; let maxc = -1;
+    const cRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g; let cm;
+    while((cm = cRe.exec(inner))){
+      const attrs = cm[1] || ""; const body = cm[2];
+      const ref = (/r="([^"]+)"/.exec(attrs) || [])[1];
+      const t   = (/t="([^"]+)"/.exec(attrs) || [])[1];
+      const ci  = ref ? colToIndex(ref) : cells.length;
+      let val = "";
+      if(body !== undefined){
+        if(t === "s"){ const v=(/<v\b[^>]*>([\s\S]*?)<\/v>/.exec(body)||[])[1]; if(v!==undefined) val=shared[+v]||""; }
+        else if(t === "inlineStr"){ const tt=(/<t\b[^>]*>([\s\S]*?)<\/t>/.exec(body)||[])[1]; if(tt!==undefined) val=unescapeXml(tt); }
+        else { const v=(/<v\b[^>]*>([\s\S]*?)<\/v>/.exec(body)||[])[1]; if(v!==undefined) val=unescapeXml(v); }
+      }
+      cells[ci] = val; if(ci > maxc) maxc = ci;
+    }
+    for(let i = 0; i <= maxc; i++) if(cells[i] === undefined) cells[i] = "";
+    rows.push(cells);
+  }
+  return rows;
+}
+async function readXlsxRows(arrayBuffer){
+  const zip = await unzip(arrayBuffer);
+  const shared = parseSharedStrings(await readZipText(zip, "xl/sharedStrings.xml"));
+  let sheetName = "xl/worksheets/sheet1.xml";
+  if(!zip.entries[sheetName]){
+    const k = Object.keys(zip.entries).filter(n => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort();
+    if(k.length) sheetName = k[0];
+  }
+  return parseSheet(await readZipText(zip, sheetName), shared);
+}
+const EXPO_COL = { carrier:3, client:4, order:5, shipment:7 };  // D,E,F,H
+const SHIP_RE_EXPO = /^(4[89]|5\d)\d{6}$/;
+function detectTotalDate(row){
+  for(const c of row){
+    const m = /^Total\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec((c||"").trim());
+    if(m) return { d:+m[1], mo:+m[2], y:+m[3] };
+  }
+  return null;
+}
+function transformExpo(rows){
+  let curCarrier = "", curClient = "", curOrder = "";
+  let bucket = []; const groups = [];
+  for(const row of rows){
+    const carrier = (row[EXPO_COL.carrier] || "").trim();
+    const client  = (row[EXPO_COL.client]  || "").trim();
+    const order   = (row[EXPO_COL.order]   || "").trim();
+    const shipment= (row[EXPO_COL.shipment]|| "").trim();
+    if(carrier) curCarrier = carrier;
+    if(client)  curClient  = client;
+    if(order)   curOrder   = order;
+    const td = detectTotalDate(row);
+    if(td){ if(bucket.length){ groups.push({ date:td, orders:bucket }); bucket = []; } continue; }
+    if(SHIP_RE_EXPO.test(shipment)){
+      bucket.push({ shipment, orden:curOrder, cliente:curClient, transporte:curCarrier });
+    }
+  }
+  if(bucket.length) groups.push({ date:null, orders:bucket });
+  return groups;
+}
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; }
+  return t;
+})();
+function crc32(bytes){ let c=0xFFFFFFFF; for(let i=0;i<bytes.length;i++) c=CRC_TABLE[(c^bytes[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function escXml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;"); }
+function cellRef(colIdx, rowNum){ let s=""; let n=colIdx+1; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); } return s+rowNum; }
+function buildSheetXml(orders, withHeader){
+  const OUT = { shipment:1, orden:3, cliente:4, transporte:13 };  // B,D,E,N
+  let rowsXml = ""; let rowNum = 1;
+  const emitRow = (vals) => {
+    let cells = "";
+    for(const k in vals){
+      const ci = OUT[k]; const v = vals[k];
+      if(v === "" || v == null) continue;
+      cells += `<c r="${cellRef(ci,rowNum)}" t="inlineStr"><is><t xml:space="preserve">${escXml(v)}</t></is></c>`;
+    }
+    rowsXml += `<row r="${rowNum}">${cells}</row>`; rowNum++;
+  };
+  if(withHeader) emitRow({ shipment:"Shipment", orden:"N° orden", cliente:"Cliente", transporte:"Transporte" });
+  for(const o of orders) emitRow({ shipment:o.shipment, orden:o.orden, cliente:o.cliente, transporte:o.transporte });
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowsXml}</sheetData></worksheet>`;
+}
+function zipStore(files){
+  const enc = new TextEncoder(); const parts = []; const central = []; let offset = 0;
+  const push = (u8) => { parts.push(u8); offset += u8.length; };
+  const u16 = (n)=>{ const b=new Uint8Array(2); new DataView(b.buffer).setUint16(0,n,true); return b; };
+  const u32 = (n)=>{ const b=new Uint8Array(4); new DataView(b.buffer).setUint32(0,n>>>0,true); return b; };
+  for(const f of files){
+    const nameBytes = enc.encode(f.name);
+    const data = (f.data instanceof Uint8Array) ? f.data : enc.encode(f.data);
+    const crc = crc32(data); const localOffset = offset;
+    push(u32(0x04034b50)); push(u16(20)); push(u16(0)); push(u16(0)); push(u16(0)); push(u16(0));
+    push(u32(crc)); push(u32(data.length)); push(u32(data.length));
+    push(u16(nameBytes.length)); push(u16(0)); push(nameBytes); push(data);
+    central.push({ nameBytes, crc, size:data.length, localOffset });
+  }
+  const cdStart = offset;
+  for(const c of central){
+    push(u32(0x02014b50)); push(u16(20)); push(u16(20)); push(u16(0)); push(u16(0)); push(u16(0)); push(u16(0));
+    push(u32(c.crc)); push(u32(c.size)); push(u32(c.size));
+    push(u16(c.nameBytes.length)); push(u16(0)); push(u16(0)); push(u16(0)); push(u16(0)); push(u32(0));
+    push(u32(c.localOffset)); push(c.nameBytes);
+  }
+  const cdSize = offset - cdStart;
+  push(u32(0x06054b50)); push(u16(0)); push(u16(0)); push(u16(central.length)); push(u16(central.length));
+  push(u32(cdSize)); push(u32(cdStart)); push(u16(0));
+  let total = 0; for(const p of parts) total += p.length;
+  const out = new Uint8Array(total); let pos = 0;
+  for(const p of parts){ out.set(p, pos); pos += p.length; }
+  return out;
+}
+function buildXlsx(orders, withHeader){
+  const files = [
+    { name:"[Content_Types].xml", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>` },
+    { name:"_rels/.rels", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+    { name:"xl/workbook.xml", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Turnos" sheetId="1" r:id="rId1"/></sheets></workbook>` },
+    { name:"xl/_rels/workbook.xml.rels", data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>` },
+    { name:"xl/worksheets/sheet1.xml", data: buildSheetXml(orders, withHeader) }
+  ];
+  return zipStore(files);
+}
+
+async function readAllSheets(arrayBuffer){
+  const zip = await unzip(arrayBuffer);
+  const shared = parseSharedStrings(await readZipText(zip, "xl/sharedStrings.xml"));
+  const wb = await readZipText(zip, "xl/workbook.xml") || "";
+  const rels = await readZipText(zip, "xl/_rels/workbook.xml.rels") || "";
+  const relMap = {}; let rm; const rre = /<Relationship\b([^>]*?)\/?>/g;
+  while((rm = rre.exec(rels))){
+    const id = (/Id="([^"]*)"/.exec(rm[1]) || [])[1];
+    const tgt = (/Target="([^"]*)"/.exec(rm[1]) || [])[1];
+    if(id) relMap[id] = tgt;
+  }
+  const refs = []; let m; const sre = /<sheet\b([^>]*?)\/?>/g;
+  while((m = sre.exec(wb))){
+    const name = (/name="([^"]*)"/.exec(m[1]) || [])[1] || "Hoja";
+    const rid = (/r:id="([^"]*)"/.exec(m[1]) || [])[1];
+    let tgt = relMap[rid] || "";
+    if(tgt && !tgt.startsWith("xl/")) tgt = "xl/" + tgt.replace(/^\//, "");
+    if(tgt && zip.entries[tgt]) refs.push({ name, file: tgt });
+  }
+  if(!refs.length){
+    Object.keys(zip.entries).filter(n => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort()
+      .forEach((f, i) => refs.push({ name: "Hoja " + (i+1), file: f }));
+  }
+  const out = [];
+  for(const r of refs) out.push({ name: r.name, rows: parseSheet(await readZipText(zip, r.file), shared) });
+  return out;
+}
+function pickExpoGroups(sheets){
+  let best = null;
+  for(const s of sheets){
+    const groups = transformExpo(s.rows);
+    const orders = groups.filter(g => g.date).reduce((a, g) => a + g.orders.length, 0);
+    if(orders > 0 && (!best || orders > best.orders)) best = { sheet: s.name, groups, orders };
+  }
+  return best;
+}
+
+/* ============================================================
+   TURNERO EXPO — interfaz
+   ============================================================ */
+const tabNacional = $("#tabNacional"), tabExpo = $("#tabExpo");
+const modeNacional = $("#modeNacional"), modeExpo = $("#modeExpo");
+function setTab(expo){
+  modeExpo.hidden = !expo; modeNacional.hidden = expo;
+  tabExpo.classList.toggle("sel", expo); tabNacional.classList.toggle("sel", !expo);
+}
+tabNacional.addEventListener("click", () => setTab(false));
+tabExpo.addEventListener("click", () => setTab(true));
+
+const expoResultsEl = $("#expoResults");
+let expoGroups = [];
+const fmtD  = (d) => `${String(d.d).padStart(2,"0")}/${String(d.mo).padStart(2,"0")}/${d.y}`;
+const fileD = (d) => `${String(d.d).padStart(2,"0")}-${String(d.mo).padStart(2,"0")}-${d.y}`;
+
+function downloadXlsx(bytes, filename){
+  const blob = new Blob([bytes], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+function genAndDownload(group){
+  const withHeader = $("#expoHeader").checked;
+  downloadXlsx(buildXlsx(group.orders, withHeader), `Expo ${fileD(group.date)}.xlsx`);
+}
+function renderExpo(groups, sheetName){
+  expoResultsEl.innerHTML = "";
+  expoGroups = groups.filter(g => g.date);
+  const noDate = groups.find(g => !g.date);
+  if(!expoGroups.length){
+    const box = el("div", "error-box");
+    box.appendChild(el("span", "ico", "🔍"));
+    box.appendChild(el("div", null, 'No se encontraron fechas (filas "Total dd/mm/aaaa") en ninguna hoja del Excel.'));
+    expoResultsEl.appendChild(box); return;
+  }
+  const total = expoGroups.reduce((a, g) => a + g.orders.length, 0);
+  const hoja = sheetName ? `Hoja: ${sheetName} · ` : "";
+  expoResultsEl.appendChild(el("div", "expo-summary", `${hoja}${expoGroups.length} fechas · ${total} órdenes en total`));
+  const all = el("button", "btn-primary expo-allbtn", "⬇️ Descargar todos");
+  all.addEventListener("click", () => { expoGroups.forEach((g, i) => setTimeout(() => genAndDownload(g), i * 400)); });
+  expoResultsEl.appendChild(all);
+  expoGroups.forEach(g => {
+    const card = el("div", "date-card");
+    const info = el("div", "dc-info");
+    info.appendChild(el("div", "dc-date", fmtD(g.date)));
+    info.appendChild(el("div", "dc-sub", g.orders.length + (g.orders.length === 1 ? " orden" : " órdenes")));
+    card.appendChild(info);
+    const b = el("button", "btn-dl", "⬇️ Descargar");
+    b.addEventListener("click", () => genAndDownload(g));
+    card.appendChild(b);
+    expoResultsEl.appendChild(card);
+  });
+  if(noDate){
+    expoResultsEl.appendChild(el("div", "expo-summary", `⚠️ ${noDate.orders.length} órdenes sin fila "Total" no se incluyen.`));
+  }
+}
+async function processExpoFile(file){
+  if(!file) return;
+  expoResultsEl.innerHTML = "";
+  expoResultsEl.appendChild(el("div", "expo-summary", "Procesando " + file.name + "…"));
+  try{
+    const sheets = await readAllSheets(await file.arrayBuffer());
+    const best = pickExpoGroups(sheets);
+    renderExpo(best ? best.groups : [], best ? best.sheet : null);
+  }catch(e){
+    expoResultsEl.innerHTML = "";
+    const box = el("div", "error-box");
+    box.appendChild(el("span", "ico", "⚠️"));
+    box.appendChild(el("div", null, "No se pudo leer el Excel: " + e.message));
+    expoResultsEl.appendChild(box);
+  }
+}
+const expoDrop = $("#expoDrop"), expoFileInput = $("#expoFile");
+expoDrop.addEventListener("click", () => expoFileInput.click());
+expoFileInput.addEventListener("change", () => processExpoFile(expoFileInput.files[0]));
+["dragenter","dragover"].forEach(ev => expoDrop.addEventListener(ev, (e) => { e.preventDefault(); expoDrop.classList.add("drag"); }));
+["dragleave","drop"].forEach(ev => expoDrop.addEventListener(ev, (e) => { e.preventDefault(); expoDrop.classList.remove("drag"); }));
+expoDrop.addEventListener("drop", (e) => { if(e.dataTransfer.files[0]) processExpoFile(e.dataTransfer.files[0]); });
 
 /* ============================================================
    Service Worker (PWA offline)

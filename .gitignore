@@ -1,6 +1,8 @@
 # Artefactos de prueba local (no van al deploy)
 _serve.js
+_expo_*.js
 .__chk.js
+salida_expo/
 
 # Dependencias / build
 node_modules/
