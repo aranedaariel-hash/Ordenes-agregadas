@@ -285,9 +285,8 @@
         <input type="file" id="expoFile" accept=".xlsx" hidden>
         <span class="dz-ico">📄⬇️</span>
         <div class="dz-main">Arrastrá el <b>.xlsx</b> acá o tocá para elegirlo</div>
-        <div class="dz-sub">Se genera un Excel por fecha con Shipment · N° orden · Cliente · Transporte</div>
+        <div class="dz-sub">Se genera un Excel por fecha listo para importar en ALET (Origen: Exportación)</div>
       </div>
-      <label class="chk"><input type="checkbox" id="expoHeader"> Incluir fila de encabezado en los Excel generados</label>
     </div>
     <div id="expoResults"></div>
   </div>
@@ -1296,7 +1295,7 @@ async function buildStandardXlsx(rows, sheetName){
       }
       return zipStore(files);
     }
-  } catch(e){ /* plantilla no disponible, caer al modo standalone */ }
+  } catch(e){ console.warn("_alet_template.xlsx no disponible, usando modo standalone:", e.message); }
 
   // Fallback: estructura standalone (sin template)
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
@@ -1324,6 +1323,13 @@ async function buildStandardXlsx(rows, sheetName){
 // un xlsx STORED (sin comprimir) suele detectarse como application/zip por finfo/libmagic
 // y ALET lo rechaza con "formato de archivo incorrecto".
 async function zipStore(files){
+  files.sort((a, b) => {
+    if (a.name === "[Content_Types].xml") return -1; if (b.name === "[Content_Types].xml") return 1;
+    if (a.name === "_rels/.rels") return -1; if (b.name === "_rels/.rels") return 1;
+    const aEnd = a.name.startsWith("docProps/"), bEnd = b.name.startsWith("docProps/");
+    if (aEnd && !bEnd) return 1; if (!aEnd && bEnd) return -1;
+    return 0;
+  });
   const enc = new TextEncoder(); const parts = []; const central = []; let offset = 0;
   const push = (u8) => { parts.push(u8); offset += u8.length; };
   const u16 = (n)=>{ const b=new Uint8Array(2); new DataView(b.buffer).setUint16(0,n,true); return b; };
@@ -1332,14 +1338,22 @@ async function zipStore(files){
     const nameBytes = enc.encode(f.name);
     const raw = (f.data instanceof Uint8Array) ? f.data : enc.encode(f.data);
     const crc = crc32(raw); const comp = await deflateRaw(raw); const localOffset = offset;
-    push(u32(0x04034b50)); push(u16(20)); push(u16(0)); push(u16(8)); push(u16(0)); push(u16(0));
+    push(u32(0x04034b50)); push(u16(20)); push(u16(6)); push(u16(8)); push(u16(0)); push(u16(0));
     push(u32(crc)); push(u32(comp.length)); push(u32(raw.length));
-    push(u16(nameBytes.length)); push(u16(0)); push(nameBytes); push(comp);
+    const extra = f.extra || (() => {
+      const map = { "[Content_Types].xml": 520, "_rels/.rels": 520, "xl/_rels/workbook.xml.rels": 264, "docProps/core.xml": 264, "docProps/app.xml": 264 };
+      const sz = map[f.name]; if(!sz) return new Uint8Array(0);
+      const b = new Uint8Array(sz); const v = new DataView(b.buffer);
+      v.setUint16(0, 0xa220, true); v.setUint16(2, sz - 4, true);
+      b[4]=0x28; b[5]=0xa0; b[6]=0x00; b[7]=sz===520?0x02:0x01;
+      return b;
+    })();
+    push(u16(nameBytes.length)); push(u16(extra.length)); push(nameBytes); push(extra); push(comp);
     central.push({ nameBytes, crc, compSize:comp.length, size:raw.length, localOffset });
   }
   const cdStart = offset;
   for(const c of central){
-    push(u32(0x02014b50)); push(u16(20)); push(u16(20)); push(u16(0)); push(u16(8)); push(u16(0)); push(u16(0));
+    push(u32(0x02014b50)); push(u16(45)); push(u16(20)); push(u16(6)); push(u16(8)); push(u16(0)); push(u16(0));
     push(u32(c.crc)); push(u32(c.compSize)); push(u32(c.size));
     push(u16(c.nameBytes.length)); push(u16(0)); push(u16(0)); push(u16(0)); push(u16(0)); push(u32(0));
     push(u32(c.localOffset)); push(c.nameBytes);
@@ -1352,10 +1366,20 @@ async function zipStore(files){
   for(const p of parts){ out.set(p, pos); pos += p.length; }
   return out;
 }
-// Turnero Expo: B(1)=Shipment, D(3)=N° orden, E(4)=Cliente, N(13)=Transporte
-function buildXlsx(orders, withHeader){
+/* Turnero Expo → ALET (Origen: Exportación).
+   Siempre incluye la fila de encabezados con los nombres exactos del formato DOW/SAP
+   porque ALET valida las columnas por header. Columnas de datos: B(1) Shipment,
+   D(3) Sales Order, E(4) Ship-to Name, N(13) Number of forwarding agent. */
+function buildXlsx(orders){
   const rows = [];
-  if(withHeader) rows.push({ 1:"Shipment", 3:"N° orden", 4:"Cliente", 13:"Transporte" });
+  // Fila 1: encabezados DOW (19 columnas A-S). Solo se populan los que usamos.
+  rows.push({
+    0:"Shipto Country", 1:"Shipment", 2:"Delivery", 3:"Sales Order",
+    4:"Ship-to Name", 5:"Shipto Region", 6:"Shipto City", 7:"Plnt",
+    8:"SLoc", 9:"Material", 10:"Material Number", 11:"Delivery quantity",
+    12:"SU", 13:"Number of forwarding agent", 14:"PlShptCmpl", 15:"Day",
+    16:"Tender Status", 17:"IncoT", 18:"Inco. 2"
+  });
   for(const o of orders) rows.push({ 1:o.shipment, 3:o.orden, 4:o.cliente, 13:o.transporte });
   return buildStandardXlsx(rows, "Turnos");
 }
@@ -1443,8 +1467,7 @@ function downloadXlsx(bytes, filename){
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 async function genAndDownload(group){
-  const withHeader = $("#expoHeader").checked;
-  downloadXlsx(await buildXlsx(group.orders, withHeader), `Expo ${fileD(group.date)}.xlsx`);
+  downloadXlsx(await buildXlsx(group.orders), `Expo ${fileD(group.date)}.xlsx`);
 }
 function renderExpo(groups, sheetName){
   expoResultsEl.innerHTML = "";
