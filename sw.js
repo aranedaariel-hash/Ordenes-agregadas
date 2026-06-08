@@ -1,14 +1,15 @@
 /* Service Worker — Procesador de Órdenes DOW
    Estrategia network-first: online trae siempre lo último (las actualizaciones se ven
    al recargar); offline sirve lo cacheado. Subir CACHE al cambiar archivos. */
-const CACHE = "turnero-dow-v8";
+const CACHE = "turnero-dow-v9";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
   "./icon.svg",
   "./icon-maskable.svg",
-  "./_alet_template.xlsx"
+  "./_alet_template.xlsx",
+  "./sgl-logo.png"
 ];
 
 self.addEventListener("install", (e) => {

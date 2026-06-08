@@ -53,12 +53,9 @@
     display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-top:6px;
   }
   .logo{
-    width:44px;height:44px;border-radius:12px;flex:0 0 auto;
-    background:linear-gradient(145deg,var(--accent),var(--accent2));
-    display:flex;align-items:center;justify-content:center;
-    font-weight:700;font-size:18px;color:#fff;box-shadow:var(--shadow);
-    letter-spacing:.5px;
+    height:36px;flex:0 0 auto;display:flex;align-items:center;
   }
+  .logo img{height:36px;width:auto;display:block;}
   header.top h1{font-size:1.18rem;margin:0;font-weight:600;line-height:1.15;}
   header.top p{margin:2px 0 0;font-size:.78rem;color:var(--muted);}
 
@@ -107,8 +104,8 @@
   .pip-title{
     display:flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;margin:0 0 4px;color:var(--ink);
   }
-  .pip-title .dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(145deg,var(--accent),var(--accent2));
-    display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;color:#fff;font-weight:700;}
+  .pip-title .dot{height:22px;display:inline-flex;align-items:center;}
+  .pip-title .dot img{height:22px;width:auto;display:block;}
 
   /* Modo compacto para la ventana flotante (que una orden entre entera sin scroll) */
   body.pip .wrap{padding:10px 12px 14px;max-width:none;}
@@ -249,7 +246,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="logo">DOW</div>
+    <div class="logo"><img src="sgl-logo.png" alt="SGL"></div>
     <div>
       <h1>Procesador de Órdenes DOW</h1>
       <p>Cambios logísticos → carga en ALET</p>
@@ -1009,7 +1006,7 @@ async function flotarEncima(){
   const host = pipWin.document.createElement("div");
   host.className = "wrap";
   const title = el("div", "pip-title");
-  const dot = el("span", "dot", "DOW"); title.appendChild(dot);
+  const dot = el("span", "dot"); const dotImg = el("img"); dotImg.src="sgl-logo.png"; dotImg.alt="SGL"; dot.appendChild(dotImg); title.appendChild(dot);
   title.appendChild(document.createTextNode("Órdenes DOW"));
   host.appendChild(title);
   // mover el contenido real (conserva los listeners de copiar)

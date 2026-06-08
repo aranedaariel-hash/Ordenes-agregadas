@@ -11,6 +11,7 @@ salida_expo/
 *.png
 # Plantilla ALET sí va al repo (no tiene datos reales)
 !_alet_template.xlsx
+!sgl-logo.png
 
 # Dependencias / build
 node_modules/
