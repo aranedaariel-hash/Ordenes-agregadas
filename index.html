@@ -230,6 +230,14 @@
   .date-card .dc-sub{font-size:.78rem;color:var(--muted);}
   .btn-dl{background:var(--green);color:#fff;border:none;border-radius:9px;padding:10px 16px;font-weight:600;font-size:.85rem;cursor:pointer;}
   .btn-dl:hover{filter:brightness(1.08);}
+  .date-card.checked{border-color:var(--accent);background:rgba(47,128,237,.06);}
+  .dc-chk{width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex:0 0 auto;}
+  .dc-info{cursor:pointer;}
+  .sel-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;}
+  .btn-sel{background:transparent;color:var(--muted);border:1px solid var(--line);font-size:.82rem;padding:6px 12px;border-radius:8px;font-family:inherit;font-weight:500;cursor:pointer;}
+  .btn-sel:hover{color:var(--ink);border-color:var(--accent);}
+  .btn-dl-sel{flex:1;min-width:160px;}
+  .btn-dl-sel:disabled{opacity:.5;cursor:default;}
   .toast{
     position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
     background:var(--green);color:#fff;padding:11px 20px;border-radius:30px;font-size:.86rem;font-weight:600;
@@ -1205,34 +1213,41 @@ async function readXlsxRows(arrayBuffer){
   }
   return parseSheet(await readZipText(zip, sheetName), shared);
 }
-const EXPO_COL = { carrier:3, client:4, order:5, shipment:7 };  // D,E,F,H
+const EXPO_COL = { date:0, carrier:3, client:4, order:5, delivery:6, shipment:7 };  // A,D,E,F,G,H
 const SHIP_RE_EXPO = /^(4[89]|5\d)\d{6}$/;
-function detectTotalDate(row){
-  for(const c of row){
-    const m = /^Total\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec((c||"").trim());
-    if(m) return { d:+m[1], mo:+m[2], y:+m[3] };
+function excelDateToObj(val){
+  const s = String(val).trim();
+  const m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s);
+  if(m) return { d:+m[1], mo:+m[2], y: +m[3] < 100 ? 2000 + +m[3] : +m[3] };
+  const n = parseFloat(s);
+  if(!isNaN(n) && n > 40000){
+    const dt = new Date((n - 25569) * 86400 * 1000);
+    return { d: dt.getUTCDate(), mo: dt.getUTCMonth()+1, y: dt.getUTCFullYear() };
   }
   return null;
 }
 function transformExpo(rows){
   let curCarrier = "", curClient = "", curOrder = "";
-  let bucket = []; const groups = [];
+  let curDate = null;
+  const groups = {}, order = [];
   for(const row of rows){
-    const carrier = (row[EXPO_COL.carrier] || "").trim();
-    const client  = (row[EXPO_COL.client]  || "").trim();
-    const order   = (row[EXPO_COL.order]   || "").trim();
-    const shipment= (row[EXPO_COL.shipment]|| "").trim();
-    if(carrier) curCarrier = carrier;
-    if(client)  curClient  = client;
-    if(order)   curOrder   = order;
-    const td = detectTotalDate(row);
-    if(td){ if(bucket.length){ groups.push({ date:td, orders:bucket }); bucket = []; } continue; }
-    if(SHIP_RE_EXPO.test(shipment)){
-      bucket.push({ shipment, orden:curOrder, cliente:curClient, transporte:curCarrier });
+    const dateVal  = (row[EXPO_COL.date]     || "").trim();
+    const carrier  = (row[EXPO_COL.carrier]  || "").trim();
+    const client   = (row[EXPO_COL.client]   || "").trim();
+    const orderVal = (row[EXPO_COL.order]    || "").trim();
+    const delivery = (row[EXPO_COL.delivery] || "").trim();
+    const shipment = (row[EXPO_COL.shipment] || "").trim();
+    if(dateVal){ const d = excelDateToObj(dateVal); if(d) curDate = d; }
+    if(carrier)  curCarrier = carrier;
+    if(client)   curClient  = client;
+    if(orderVal) curOrder   = orderVal;
+    if(SHIP_RE_EXPO.test(shipment) && curDate){
+      const key = `${curDate.d}/${curDate.mo}/${curDate.y}`;
+      if(!groups[key]){ groups[key] = { date: curDate, orders: [] }; order.push(key); }
+      groups[key].orders.push({ shipment, delivery, orden: curOrder, cliente: curClient, transporte: curCarrier });
     }
   }
-  if(bucket.length) groups.push({ date:null, orders:bucket });
-  return groups;
+  return order.map(k => groups[k]);
 }
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -1365,19 +1380,22 @@ async function zipStore(files){
 }
 /* Turnero Expo → ALET (Origen: Exportación).
    Siempre incluye la fila de encabezados con los nombres exactos del formato DOW/SAP
-   porque ALET valida las columnas por header. Columnas de datos: B(1) Shipment,
+   porque ALET valida las columnas por header.
+   Columnas de datos: A(0) Fecha, B(1) Shipment, C(2) Delivery,
    D(3) Sales Order, E(4) Ship-to Name, N(13) Number of forwarding agent. */
-function buildXlsx(orders){
+function buildXlsx(group){
   const rows = [];
-  // Fila 1: encabezados DOW (19 columnas A-S). Solo se populan los que usamos.
   rows.push({
-    0:"Shipto Country", 1:"Shipment", 2:"Delivery", 3:"Sales Order",
+    0:"Fecha", 1:"Shipment", 2:"Delivery", 3:"Sales Order",
     4:"Ship-to Name", 5:"Shipto Region", 6:"Shipto City", 7:"Plnt",
     8:"SLoc", 9:"Material", 10:"Material Number", 11:"Delivery quantity",
     12:"SU", 13:"Number of forwarding agent", 14:"PlShptCmpl", 15:"Day",
     16:"Tender Status", 17:"IncoT", 18:"Inco. 2"
   });
-  for(const o of orders) rows.push({ 1:o.shipment, 3:o.orden, 4:o.cliente, 13:o.transporte });
+  const fechaStr = fmtD(group.date);
+  for(const o of group.orders){
+    rows.push({ 0:fechaStr, 1:o.shipment, 2:o.delivery||"", 3:o.orden, 4:o.cliente, 13:o.transporte });
+  }
   return buildStandardXlsx(rows, "Turnos");
 }
 
@@ -1464,38 +1482,78 @@ function downloadXlsx(bytes, filename){
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 async function genAndDownload(group){
-  downloadXlsx(await buildXlsx(group.orders), `Expo ${fileD(group.date)}.xlsx`);
+  downloadXlsx(await buildXlsx(group), `Expo ${fileD(group.date)}.xlsx`);
 }
 function renderExpo(groups, sheetName){
   expoResultsEl.innerHTML = "";
   expoGroups = groups.filter(g => g.date);
-  const noDate = groups.find(g => !g.date);
   if(!expoGroups.length){
     const box = el("div", "error-box");
     box.appendChild(el("span", "ico", "🔍"));
-    box.appendChild(el("div", null, 'No se encontraron fechas (filas "Total dd/mm/aaaa") en ninguna hoja del Excel.'));
+    box.appendChild(el("div", null, "No se encontraron fechas en ninguna hoja del Excel."));
     expoResultsEl.appendChild(box); return;
   }
   const total = expoGroups.reduce((a, g) => a + g.orders.length, 0);
   const hoja = sheetName ? `Hoja: ${sheetName} · ` : "";
   expoResultsEl.appendChild(el("div", "expo-summary", `${hoja}${expoGroups.length} fechas · ${total} órdenes en total`));
-  const all = el("button", "btn-primary expo-allbtn", "⬇️ Descargar todos");
-  all.addEventListener("click", () => { expoGroups.forEach((g, i) => setTimeout(() => genAndDownload(g), i * 400)); });
-  expoResultsEl.appendChild(all);
+
+  // Controles de selección
+  const selCtrls = el("div", "sel-controls");
+  const btnSelAll  = el("button", "btn-sel", "Seleccionar todo");
+  const btnSelNone = el("button", "btn-sel", "Ninguno");
+  const btnDlSel   = el("button", "btn-primary btn-dl-sel", "⬇️ Descargar seleccionados");
+  btnDlSel.disabled = true;
+  selCtrls.appendChild(btnSelAll);
+  selCtrls.appendChild(btnSelNone);
+  selCtrls.appendChild(btnDlSel);
+  expoResultsEl.appendChild(selCtrls);
+
+  const checkboxes = [];
+
+  function updateSelBtn(){
+    const n = checkboxes.filter(c => c.checked).length;
+    btnDlSel.textContent = n > 0 ? `⬇️ Descargar seleccionados (${n})` : "⬇️ Descargar seleccionados";
+    btnDlSel.disabled = n === 0;
+  }
+
   expoGroups.forEach(g => {
     const card = el("div", "date-card");
+    const chk = document.createElement("input");
+    chk.type = "checkbox"; chk.className = "dc-chk";
+    chk.addEventListener("change", () => {
+      card.classList.toggle("checked", chk.checked);
+      updateSelBtn();
+    });
+    checkboxes.push(chk);
+    card.appendChild(chk);
+
     const info = el("div", "dc-info");
     info.appendChild(el("div", "dc-date", fmtD(g.date)));
     info.appendChild(el("div", "dc-sub", g.orders.length + (g.orders.length === 1 ? " orden" : " órdenes")));
+    info.addEventListener("click", () => { chk.checked = !chk.checked; chk.dispatchEvent(new Event("change")); });
     card.appendChild(info);
-    const b = el("button", "btn-dl", "⬇️ Descargar");
+
+    const b = el("button", "btn-dl", "⬇️");
+    b.title = "Descargar este día";
     b.addEventListener("click", () => genAndDownload(g));
     card.appendChild(b);
     expoResultsEl.appendChild(card);
   });
-  if(noDate){
-    expoResultsEl.appendChild(el("div", "expo-summary", `⚠️ ${noDate.orders.length} órdenes sin fila "Total" no se incluyen.`));
-  }
+
+  btnSelAll.addEventListener("click", () => {
+    checkboxes.forEach(c => { c.checked = true; });
+    expoResultsEl.querySelectorAll(".date-card").forEach(c => c.classList.add("checked"));
+    updateSelBtn();
+  });
+  btnSelNone.addEventListener("click", () => {
+    checkboxes.forEach(c => { c.checked = false; });
+    expoResultsEl.querySelectorAll(".date-card").forEach(c => c.classList.remove("checked"));
+    updateSelBtn();
+  });
+  btnDlSel.addEventListener("click", () => {
+    const sel = expoGroups.filter((_, i) => checkboxes[i] && checkboxes[i].checked);
+    sel.forEach((g, i) => setTimeout(() => genAndDownload(g), i * 400));
+  });
 }
 async function processExpoFile(file){
   if(!file) return;
