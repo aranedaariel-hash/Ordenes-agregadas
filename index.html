@@ -554,7 +554,10 @@ function isTransportistaHeader(line){
    ============================================================ */
 function procesar(raw, now){
   const result = { altas: [], bajas: [], error: null };
-  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  // Filas con tabulaciones (tabla copiada como texto plano) → un campo por línea
+  const lines = raw.split(/\r?\n/)
+    .flatMap(l => l.includes("\t") ? l.split("\t") : [l])
+    .map(l => l.trim()).filter(l => l.length > 0);
   if(lines.length === 0){ result.error = "No se encontraron órdenes en el texto pegado."; return result; }
 
   const is8 = s => /^\d{8}$/.test(s);
@@ -769,6 +772,45 @@ function procesar(raw, now){
     result.error = "No se encontraron órdenes en el texto pegado.";
   }
   return result;
+}
+
+/* ============================================================
+   Mail con tabla (Excel/SAP pegado en el mail) → texto canónico
+   El formato "tabla" del mail se aplana a un campo por línea —
+   el mismo formato del mail clásico, así procesar() sirve para ambos.
+   ============================================================ */
+const TABLE_HEADER_RE = /shipment\s*number|saporderno|ship\s*to\s*party/i;
+
+function htmlMailToLines(html){
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const clean = s => (s || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+  const out = [];
+  let buf = "";
+  const flush = () => { const t = clean(buf); if(t) out.push(t); buf = ""; };
+  const BLOCK_RE = /^(DIV|P|LI|UL|OL|H[1-6]|SECTION|ARTICLE|BLOCKQUOTE|HR)$/;
+  (function walk(node){
+    if(node.nodeType === 3){ buf += node.textContent; return; }
+    if(node.nodeType !== 1) return;
+    const tag = node.tagName;
+    if(tag === "STYLE" || tag === "SCRIPT" || tag === "TITLE") return;
+    if(tag === "BR"){ flush(); return; }
+    if(tag === "TABLE"){
+      flush();
+      node.querySelectorAll("tr").forEach(tr => {
+        if(tr.querySelector("table")) return;   // fila de layout: su contenido sale por las filas anidadas
+        const cells = [...tr.querySelectorAll("th,td")].map(td => clean(td.textContent));
+        if(TABLE_HEADER_RE.test(cells.join(" "))) return;   // fila de encabezados SAP, no es dato
+        cells.forEach(c => { if(c) out.push(c); });
+      });
+      return;
+    }
+    const isBlock = BLOCK_RE.test(tag);
+    if(isBlock) flush();
+    node.childNodes.forEach(walk);
+    if(isBlock) flush();
+  })(doc.body);
+  flush();
+  return out.join("\n");
 }
 
 /* ============================================================
@@ -1087,6 +1129,20 @@ $("#btnClear").addEventListener("click", () => {
   resultsEl.innerHTML = "";
   setFloatBtn();
   $("#input").focus();
+});
+
+// Pegado de mail con tabla (Excel/SAP pegado en Outlook): el portapapeles trae
+// también la versión HTML; si hay una <table>, se aplana a un campo por línea
+// (el formato que entiende procesar()) en lugar de pegar el texto crudo.
+$("#input").addEventListener("paste", (e) => {
+  const html = e.clipboardData && e.clipboardData.getData("text/html");
+  if(!html || !/<table/i.test(html)) return;       // sin tabla → pegado normal
+  const text = htmlMailToLines(html);
+  if(!text.trim()) return;                          // tabla vacía → pegado normal
+  e.preventDefault();
+  const ta = e.target;
+  ta.setRangeText(text, ta.selectionStart, ta.selectionEnd, "end");
+  showToast("Tabla detectada ✔ convertida");
 });
 
 /* ============================================================
