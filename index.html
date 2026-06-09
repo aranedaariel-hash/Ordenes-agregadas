@@ -1407,9 +1407,8 @@ function buildXlsx(group){
    AL=37 (Carga combinada externa) y AN=39 (Centro de distribución) se dejan vacíos. */
 function buildXlsxAltas(altas){
   const M = {
-    transporte:0, shipment:1, nroOrden:3, cliente:5, localidad:6,
-    alocacion:11, fechaCarga:16, fechaEntrega:17, provincia:30,
-    tipoUnidad:31, delivery:40
+    transporte:0, shipment:1, delivery:2, nroOrden:3, cliente:5, localidad:6,
+    alocacion:11, fechaCarga:16, fechaEntrega:17, provincia:30, tipoUnidad:31
   };
   const rows = altas.map(a => {
     const r = {};
