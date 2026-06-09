@@ -1261,7 +1261,8 @@ function cellRef(colIdx, rowNum){ let s=""; let n=colIdx+1; while(n>0){ const r=
    settings, worksheet rels, etc.) y reemplaza solo sheet1 y sharedStrings con los datos.
    rows: array de filas; cada fila es un objeto { colIdx(0-based): valorTexto }.
    Celdas vacías o nulas se omiten. */
-async function buildStandardXlsx(rows, sheetName){
+async function buildStandardXlsx(rows, sheetName, templatePath){
+  templatePath = templatePath || "_alet_template.xlsx";
   // Tabla de cadenas compartidas
   const sst = [], sstIndex = new Map(); let totalRefs = 0;
   const intern = (s) => {
@@ -1295,12 +1296,14 @@ async function buildStandardXlsx(rows, sheetName){
 
   // Intentar con plantilla estructural (garantiza compatibilidad con ALET)
   try {
-    const resp = await fetch("_alet_template.xlsx");
+    const resp = await fetch(templatePath);
     if(resp.ok){
       const tzip = await unzip(await resp.arrayBuffer());
       const emptySheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/></worksheet>`;
       const overrides = { "xl/worksheets/sheet1.xml": sheetXml, "xl/sharedStrings.xml": sstXml };
-      if(tzip.entries["xl/worksheets/sheet2.xml"]) overrides["xl/worksheets/sheet2.xml"] = emptySheet;
+      for(const name of Object.keys(tzip.entries)){
+        if(/^xl\/worksheets\/sheet[2-9]\d*\.xml$/.test(name)) overrides[name] = emptySheet;
+      }
       const files = [];
       for(const name of Object.keys(tzip.entries)){
         files.push({ name, data: overrides[name] !== undefined ? overrides[name] : await readZipBytes(tzip, name) });
@@ -1409,13 +1412,14 @@ function buildXlsxAltas(altas){
   const M = {
     transporte:0, shipment:1, delivery:2, nroOrden:3, cliente:5, localidad:6,
     alocacion:11, fechaCarga:16, fechaEntrega:17, provincia:30, tipoUnidad:31
+    // AO(40) = Delivery Number (CD): se deja vacío, se carga manualmente en ALET
   };
   const rows = altas.map(a => {
     const r = {};
     for(const k in M){ const v = a[k]; if(v !== "" && v != null) r[M[k]] = v; }
     return r;
   });
-  return buildStandardXlsx(rows, "Preingresos");
+  return buildStandardXlsx(rows, "Preingresos", "_manual_template.xlsx");
 }
 
 async function readAllSheets(arrayBuffer){

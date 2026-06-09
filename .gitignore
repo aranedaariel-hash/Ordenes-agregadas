@@ -9,8 +9,9 @@ salida_expo/
 *.xlsx
 *.xls
 *.png
-# Plantilla ALET sí va al repo (no tiene datos reales)
+# Plantillas sí van al repo (no tienen datos reales)
 !_alet_template.xlsx
+!_manual_template.xlsx
 !sgl-logo.png
 
 # Dependencias / build
