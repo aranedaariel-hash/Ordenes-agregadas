@@ -1386,7 +1386,8 @@ async function zipStore(files){
    porque ALET valida las columnas por header.
    Columnas de datos: A(0) Fecha, B(1) Shipment, C(2) Delivery,
    D(3) Sales Order, E(4) Ship-to Name, N(13) Number of forwarding agent. */
-function buildXlsx(group){
+function buildXlsx(groups){
+  if(!Array.isArray(groups)) groups = [groups];
   const rows = [];
   rows.push({
     0:"Fecha", 1:"Shipment", 2:"Delivery", 3:"Sales Order",
@@ -1395,9 +1396,11 @@ function buildXlsx(group){
     12:"SU", 13:"Number of forwarding agent", 14:"PlShptCmpl", 15:"Day",
     16:"Tender Status", 17:"IncoT", 18:"Inco. 2"
   });
-  const fechaStr = fmtD(group.date);
-  for(const o of group.orders){
-    rows.push({ 0:fechaStr, 1:o.shipment, 2:o.delivery||"", 3:o.orden, 4:o.cliente, 13:o.transporte });
+  for(const group of groups){
+    const fechaStr = fmtD(group.date);
+    for(const o of group.orders){
+      rows.push({ 0:fechaStr, 1:o.shipment, 2:o.delivery||"", 3:o.orden, 4:o.cliente, 13:o.transporte });
+    }
   }
   return buildStandardXlsx(rows, "Turnos");
 }
@@ -1553,9 +1556,18 @@ function renderExpo(groups, sheetName){
     expoResultsEl.querySelectorAll(".date-card").forEach(c => c.classList.remove("checked"));
     updateSelBtn();
   });
-  btnDlSel.addEventListener("click", () => {
+  btnDlSel.addEventListener("click", async () => {
     const sel = expoGroups.filter((_, i) => checkboxes[i] && checkboxes[i].checked);
-    sel.forEach((g, i) => setTimeout(() => genAndDownload(g), i * 400));
+    if(!sel.length) return;
+    let filename;
+    if(sel.length === 1){
+      filename = `Expo ${fileD(sel[0].date)}.xlsx`;
+    } else {
+      filename = `Expo ${fileD(sel[0].date)} al ${fileD(sel[sel.length-1].date)}.xlsx`;
+    }
+    btnDlSel.disabled = true;
+    try{ downloadXlsx(await buildXlsx(sel), filename); }
+    finally{ updateSelBtn(); }
   });
 }
 async function processExpoFile(file){
